@@ -1,0 +1,7 @@
+{
+  "custom/nightlight": {
+    "format": "",
+    "tooltip": false,
+    "on-click": "omarchy-toggle-nightlight"
+  }
+}
