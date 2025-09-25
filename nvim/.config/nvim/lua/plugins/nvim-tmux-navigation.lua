@@ -1,1 +1,0 @@
-../../../../../stow/nvim/.config/nvim/lua/plugins/nvim-tmux-navigation.lua

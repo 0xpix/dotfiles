@@ -1,1 +1,0 @@
-../stow/zshrc/.zshrc

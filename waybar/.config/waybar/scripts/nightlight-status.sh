@@ -1,1 +1,0 @@
-../../../../stow/waybar/.config/waybar/scripts/nightlight-status.sh

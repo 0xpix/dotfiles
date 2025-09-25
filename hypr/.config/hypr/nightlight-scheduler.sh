@@ -1,1 +1,0 @@
-../../../stow/hypr/.config/hypr/nightlight-scheduler.sh

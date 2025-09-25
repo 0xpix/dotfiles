@@ -1,1 +1,0 @@
-../../../../stow/nvim/.config/nvim/lua/vim-options.lua

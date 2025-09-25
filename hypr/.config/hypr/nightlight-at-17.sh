@@ -1,1 +1,0 @@
-../../../stow/hypr/.config/hypr/nightlight-at-17.sh
