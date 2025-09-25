@@ -1,45 +1,21 @@
-"$schema" = 'https://starship.rs/config-schema.json'
+"$schema" = "https://starship.rs/config-schema.json"
 
+# Minimal single-line prompt using soft powerline separators
 format = """
-[](surface0)\
-$os\
-$username\
-[](bg:peach fg:surface0)\
+[](flamingo)\
 $directory\
-[](fg:peach bg:green)\
-$git_branch\
-$git_status\
+[](fg:flamingo bg:green)\
+$git_branch$git_status\
 [](fg:green bg:teal)\
-$c\
-$rust\
-$golang\
-$nodejs\
-$php\
-$java\
-$kotlin\
-$haskell\
 $python\
-[](fg:teal bg:blue)\
-$docker_context\
-[](fg:blue bg:purple)\
+[](fg:teal bg:purple)\
 $time\
 [ ](fg:purple)\
 $line_break$character"""
 
-palette = 'catppuccin_mocha'
+palette = "catppuccin_mocha"
 
-[palettes.gruvbox_dark]
-color_fg0 = '#fbf1c7'
-color_bg1 = '#3c3836'
-color_bg3 = '#665c54'
-color_blue = '#458588'
-color_aqua = '#689d6a'
-color_green = '#98971a'
-color_orange = '#d65d0e'
-color_purple = '#b16286'
-color_red = '#cc241d'
-color_yellow = '#d79921'
-
+# ---------- Palette ----------
 [palettes.catppuccin_mocha]
 rosewater = "#f5e0dc"
 flamingo = "#f2cdcd"
@@ -68,123 +44,86 @@ base = "#1e1e2e"
 mantle = "#181825"
 crust = "#11111b"
 
-[os]
-disabled = false
-style = "bg:surface0 fg:text"
+# ---------- Modules ----------
 
-[os.symbols]
-Windows = "󰍲"
-Ubuntu = "󰕈"
-SUSE = ""
-Raspbian = "󰐿"
-Mint = "󰣭"
-Macos = ""
-Manjaro = ""
-Linux = "󰌽"
-Gentoo = "󰣨"
-Fedora = "󰣛"
-Alpine = ""
-Amazon = ""
-Android = ""
-Arch = "󰣇"
-Artix = "󰣇"
-CentOS = ""
-Debian = "󰣚"
-Redhat = "󱄛"
-RedHatEnterprise = "󱄛"
-
-[username]
-show_always = true
-style_user = "bg:surface0 fg:text"
-style_root = "bg:surface0 fg:text"
-format = '[ $user ]($style)'
-
+# Keep the path compact and readable
 [directory]
-style = "fg:mantle bg:peach"
+style = "fg:base bg:flamingo"
 format = "[ $path ]($style)"
 truncation_length = 3
 truncation_symbol = "…/"
+read_only = " "
 
-[directory.substitutions]
-"Documents" = "󰈙 "
-"Downloads" = " "
-"Music" = "󰝚 "
-"Pictures" = " "
-"Developer" = "󰲋 "
-
+# Git branch on green, simple symbol, no noise
 [git_branch]
 symbol = ""
-style = "bg:teal"
+style = "bg:green"
 format = '[[ $symbol $branch ](fg:base bg:green)]($style)'
 
+# Git status with icons (no bare "?")
 [git_status]
-style = "bg:teal"
-format = '[[($all_status$ahead_behind )](fg:base bg:green)]($style)'
+style = "bg:green"
+format = '[[ $all_status$ahead_behind ](fg:base bg:green)]($style)'
+conflicted = " "
+ahead = "⇡"
+behind = "⇣"
+diverged = "⇕"
+up_to_date = ""
+untracked = " "
+stashed = " "
+modified = " "
+staged = " "
+renamed = " "
+deleted = " "
 
-[nodejs]
-symbol = ""
-style = "bg:teal"
-format = '[[ $symbol( $version) ](fg:base bg:teal)]($style)'
-
-[c]
-symbol = " "
-style = "bg:teal"
-format = '[[ $symbol( $version) ](fg:base bg:teal)]($style)'
-
-[rust]
-symbol = ""
-style = "bg:teal"
-format = '[[ $symbol( $version) ](fg:base bg:teal)]($style)'
-
-[golang]
-symbol = ""
-style = "bg:teal"
-format = '[[ $symbol( $version) ](fg:base bg:teal)]($style)'
-
-[php]
-symbol = ""
-style = "bg:teal"
-format = '[[ $symbol( $version) ](fg:base bg:teal)]($style)'
-
-[java]
-symbol = " "
-style = "bg:teal"
-format = '[[ $symbol( $version) ](fg:base bg:teal)]($style)'
-
-[kotlin]
-symbol = ""
-style = "bg:teal"
-format = '[[ $symbol( $version) ](fg:base bg:teal)]($style)'
-
-[haskell]
-symbol = ""
-style = "bg:teal"
-format = '[[ $symbol( $version) ](fg:base bg:teal)]($style)'
-
+# Python: show venv (uv/.venv) rather than version
 [python]
 symbol = ""
 style = "bg:teal"
-format = '[[ $symbol( $version) ](fg:base bg:teal)]($style)'
+# show only the virtualenv name; detect uv's .venv
+format = '[[ $symbol $virtualenv ](fg:base bg:teal)]($style)'
+pyenv_version_name = false
+detect_folders = [".venv", ".uv"]
+# fallback to nothing if no venv
 
-[docker_context]
-symbol = ""
-style = "bg:mantle"
-format = '[[ $symbol( $context) ](fg:#83a598 bg:color_bg3)]($style)'
-
+# Time: subtle clock on the right segment
 [time]
 disabled = false
 time_format = "%R"
-style = "bg:peach"
+style = "bg:purple"
 format = '[[  $time ](fg:mantle bg:purple)]($style)'
+
+# Prompt symbol
+[character]
+success_symbol = "[❯](bold fg:green) "
+error_symbol = "[❯](bold fg:red) "
+vimcmd_symbol = "[❯](bold fg:lavender) "
+vimcmd_replace_one_symbol = "[❯](bold fg:lavender) "
+vimcmd_replace_symbol = "[❯](bold fg:lavender) "
+vimcmd_visual_symbol = "[❯](bold fg:lavender) "
+
+# ---------- Things we turn off for minimalism ----------
+[os]
+disabled = true
+
+[nodejs]
+disabled = true
+[c]
+disabled = true
+[rust]
+disabled = true
+[golang]
+disabled = true
+[php]
+disabled = true
+[java]
+disabled = true
+[kotlin]
+disabled = true
+[haskell]
+disabled = true
+[docker_context]
+disabled = true
 
 [line_break]
 disabled = false
-
-[character]
-disabled = false
-success_symbol = '[](bold fg:green)'
-error_symbol = '[](bold fg:red)'
-vimcmd_symbol = '[](bold fg:creen)'
-vimcmd_replace_one_symbol = '[](bold fg:purple)'
-vimcmd_replace_symbol = '[](bold fg:purple)'
-vimcmd_visual_symbol = '[](bold fg:lavender)'
