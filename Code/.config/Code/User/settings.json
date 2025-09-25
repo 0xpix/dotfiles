@@ -261,5 +261,6 @@
   "vscode-neovim.neovimInitVimPaths.linux": "~/.config/nvim/init.lua",
   "editor.renderWhitespace": "none",
   "terminal.integrated.fontFamily": "monospace",
-  "git.ignoreRebaseWarning": true
+"git.ignoreRebaseWarning": true,
+"window.menuBarVisibility": "compact"
   }
