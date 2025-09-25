@@ -7,7 +7,6 @@ stow:
   - ghostty
   - code
   - branding
-  - themes
 
 packages:
   common:
@@ -16,6 +15,8 @@ packages:
     - stow
     - zsh
     - python3
+    - ghostty
+    - zen-browser
   arch:
     - neovim
     - ripgrep
