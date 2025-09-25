@@ -1,48 +1,78 @@
+# --- fast & safe defaults ---
+setopt prompt_subst
+DISABLE_AUTO_UPDATE="true"
+DISABLE_MAGIC_FUNCTIONS="true"
+DISABLE_COMPFIX="true"
+
+# Guard: only run in zsh
+[ -n "$ZSH_VERSION" ] || return
+
+# --- completion ---
+autoload -Uz compinit
+compinit -C
+
+# --- Oh My Zsh (plugins only) ---
+export ZSH="$HOME/.oh-my-zsh"
+ZSH_THEME=""  # theme disabled; Starship handles prompt
+
+plugins=(
+  git
+  zsh-autosuggestions
+  zsh-syntax-highlighting  # keep this last among plugins for best behavior
+  zsh-vi-mode
+  zoxide
+)
+source "$ZSH/oh-my-zsh.sh"
+
+# --- Starship prompt ---
 eval "$(starship init zsh)"
-eval "$(zoxide init zsh)"
-export EDITOR="nvim"
-export SUDO_EDITOR="$EDITOR"
-export PGHOST="/var/run/postgresql"
 
+# --- uv integration (no conda) ---
+# Add uv completion and ensure ~/.local/bin (typical uv install path) is on PATH
+export PATH="$HOME/.local/bin:$PATH"
+if command -v uv >/dev/null 2>&1; then
+  eval "$(uv generate-shell-completion zsh)"
+fi
 
-export PATH=$PATH:/usr/local/go/bin
-
-HISTFILE=~/.history
-HISTSIZE=10000
-SAVEHIST=50000
-
-setopt inc_append_history
-
-# Set up fzf key bindings and fuzzy completion
-source <(fzf --zsh)
-
-export PATH="${ASDF_DATA_DIR:-$HOME/.asdf}/shims:$HOME/.local/share/omarchy/bin:$PATH"
-eval "$(~/.local/bin/mise activate zsh)"
-
-new_tmux () {
-  session_dir=$(zoxide query --list | fzf)
-  session_name=$(basename "$session_dir")
-
-  if tmux has-session -t $session_name 2>/dev/null; then
-    if [ -n "$TMUX" ]; then
-      tmux switch-client -t "$session_name"
-    else
-      tmux attach -t "$session_name"
-    fi
-    notification="tmux attached to $session_name"
-  else
-    if [ -n "$TMUX" ]; then
-      tmux new-session -d -c "$session_dir" -s "$session_name" && tmux switch-client -t "$session_name"
-      notification="new tmux session INSIDE TMUX: $session_name"
-    else
-      tmux new-session -c "$session_dir" -s "$session_name"
-      notification="new tmux session: $session_name"
-    fi
+# --- key bindings ---
+globalias() {
+  if [[ $LBUFFER =~ '[a-zA-Z0-9]+$' ]]; then
+    zle _expand_alias
+    zle expand-word
   fi
+  zle self-insert
+}
+zle -N globalias
+bindkey " " globalias
+bindkey "^[[Z" magic-space
+bindkey -M isearch " " magic-space
 
-  if [-s "$session_name" ]; then
-    notify-send "$notification"
+# --- SSH agent (lazy) ---
+_load_ssh_agent() {
+  if [ -z "$SSH_AUTH_SOCK" ]; then
+    eval "$(ssh-agent -s)" > /dev/null
+    ssh-add ~/.ssh/id_github_sign_and_auth 2>/dev/null
   fi
 }
+autoload -U add-zsh-hook
+add-zsh-hook precmd _load_ssh_agent
 
-alias tm=new_tmux
+# --- PATH extras ---
+export VOLTA_HOME="$HOME/.volta"
+export PATH="$VOLTA_HOME/bin:$PATH"
+# (remove the wrong user path)
+# export PATH="$PATH:/home/scott/.turso"   # <- deleted
+
+# --- autosuggestions tweaks ---
+ZSH_AUTOSUGGEST_HIGHLIGHT_STYLE="fg=#663399,standout"
+ZSH_AUTOSUGGEST_BUFFER_MAX_SIZE="20"
+ZSH_AUTOSUGGEST_USE_ASYNC=1
+
+# --- history & mode ---
+HISTFILE=~/.histfile
+HISTSIZE=1000
+SAVEHIST=1000
+bindkey -e
+
+# --- aliases ---
+[ -f ~/.zsh_aliases ] && source ~/.zsh_aliases
