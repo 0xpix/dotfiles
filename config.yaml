@@ -1,0 +1,58 @@
+stow:
+  - zshrc
+  - nvim
+  - waybar
+  - hypr
+  - starship
+  - ghostty
+  - code
+  - branding
+  - themes
+
+packages:
+  common:
+    - git
+    - curl
+    - stow
+    - zsh
+    - python3
+  arch:
+    - neovim
+    - ripgrep
+    - fd
+    - python-yaml
+  debian:
+    - neovim
+    - ripgrep
+    - fd-find
+    - python3-yaml
+    - python3-pip
+  fedora:
+    - neovim
+    - ripgrep
+    - fd-find
+    - python3-pyyaml
+    - python3-pip
+  suse:
+    - neovim
+    - ripgrep
+    - fd
+    - python3-PyYAML
+
+repos:
+  - dest: ~/.local/share/zinit
+    url: https://github.com/zdharma-continuum/zinit.git
+  - dest: ~/.config/tmux/plugins/tpm
+    url: https://github.com/tmux-plugins/tpm
+  - dest: ~/.oh-my-zsh/custom/plugins/zsh-autosuggestions
+    url: https://github.com/zsh-users/zsh-autosuggestions.git
+  - dest: ~/.oh-my-zsh/custom/plugins/zsh-syntax-highlighting
+    url: https://github.com/zsh-users/zsh-syntax-highlighting.git
+  - dest: ~/.oh-my-zsh/custom/plugins/zsh-vi-mode
+    url: https://github.com/jeffreytse/zsh-vi-mode.git
+  - dest: ~/.oh-my-zsh/custom/plugins/zoxide
+    url: https://github.com/ajeetdsouza/zoxide.git
+
+post:
+  - "chsh -s $(command -v zsh) $USER || true"
+  - "[ -d ~/.local/share/zinit ] && echo 'zinit installed'"
