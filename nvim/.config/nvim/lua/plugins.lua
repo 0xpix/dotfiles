@@ -1,1 +1,1 @@
-return {}
+../../../../stow/nvim/.config/nvim/lua/plugins.lua

@@ -1,0 +1,129 @@
+"$schema" = "https://starship.rs/config-schema.json"
+
+# Minimal single-line prompt using soft powerline separators
+format = """
+[](flamingo)\
+$directory\
+[](fg:flamingo bg:green)\
+$git_branch$git_status\
+[](fg:green bg:teal)\
+$python\
+[](fg:teal bg:purple)\
+$time\
+[ ](fg:purple)\
+$line_break$character"""
+
+palette = "catppuccin_mocha"
+
+# ---------- Palette ----------
+[palettes.catppuccin_mocha]
+rosewater = "#f5e0dc"
+flamingo = "#f2cdcd"
+pink = "#f5c2e7"
+orange = "#cba6f7"
+red = "#f38ba8"
+maroon = "#eba0ac"
+peach = "#fab387"
+yellow = "#f9e2af"
+green = "#a6e3a1"
+teal = "#94e2d5"
+sky = "#89dceb"
+sapphire = "#74c7ec"
+blue = "#89b4fa"
+lavender = "#b4befe"
+text = "#cdd6f4"
+subtext1 = "#bac2de"
+subtext0 = "#a6adc8"
+overlay2 = "#9399b2"
+overlay1 = "#7f849c"
+overlay0 = "#6c7086"
+surface2 = "#585b70"
+surface1 = "#45475a"
+surface0 = "#313244"
+base = "#1e1e2e"
+mantle = "#181825"
+crust = "#11111b"
+
+# ---------- Modules ----------
+
+# Keep the path compact and readable
+[directory]
+style = "fg:base bg:flamingo"
+format = "[ $path ]($style)"
+truncation_length = 3
+truncation_symbol = "…/"
+read_only = " "
+
+# Git branch on green, simple symbol, no noise
+[git_branch]
+symbol = ""
+style = "bg:green"
+format = '[[ $symbol $branch ](fg:base bg:green)]($style)'
+
+# Git status with icons (no bare "?")
+[git_status]
+style = "bg:green"
+format = '[[ $all_status$ahead_behind ](fg:base bg:green)]($style)'
+conflicted = " "
+ahead = "⇡"
+behind = "⇣"
+diverged = "⇕"
+up_to_date = ""
+untracked = " "
+stashed = " "
+modified = " "
+staged = " "
+renamed = " "
+deleted = " "
+
+# Python: show venv (uv/.venv) rather than version
+[python]
+symbol = ""
+style = "bg:teal"
+# show only the virtualenv name; detect uv's .venv
+format = '[[ $symbol $virtualenv ](fg:base bg:teal)]($style)'
+pyenv_version_name = false
+detect_folders = [".venv", ".uv"]
+# fallback to nothing if no venv
+
+# Time: subtle clock on the right segment
+[time]
+disabled = false
+time_format = "%R"
+style = "bg:purple"
+format = '[[  $time ](fg:mantle bg:purple)]($style)'
+
+# Prompt symbol
+[character]
+success_symbol = "[❯](bold fg:green) "
+error_symbol = "[❯](bold fg:red) "
+vimcmd_symbol = "[❯](bold fg:lavender) "
+vimcmd_replace_one_symbol = "[❯](bold fg:lavender) "
+vimcmd_replace_symbol = "[❯](bold fg:lavender) "
+vimcmd_visual_symbol = "[❯](bold fg:lavender) "
+
+# ---------- Things we turn off for minimalism ----------
+[os]
+disabled = true
+
+[nodejs]
+disabled = true
+[c]
+disabled = true
+[rust]
+disabled = true
+[golang]
+disabled = true
+[php]
+disabled = true
+[java]
+disabled = true
+[kotlin]
+disabled = true
+[haskell]
+disabled = true
+[docker_context]
+disabled = true
+
+[line_break]
+disabled = false

@@ -1,3 +1,1 @@
-return {
-  "github/copilot.vim"
-}
+../../../../../stow/nvim/.config/nvim/lua/plugins/copilot.lua

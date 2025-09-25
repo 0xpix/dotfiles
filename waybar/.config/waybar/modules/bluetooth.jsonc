@@ -1,9 +1,1 @@
- {
- "bluetooth": {
-    "format": "",
-    "format-disabled": "󰂲",
-    "format-connected": "",
-    "tooltip-format": "Devices connected: {num_connections}",
-    "on-click": "blueberry"
-  }
- }
+../../../../stow/waybar/.config/waybar/modules/bluetooth.jsonc

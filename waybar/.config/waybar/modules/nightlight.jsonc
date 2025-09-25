@@ -1,7 +1,1 @@
-{
-  "custom/nightlight": {
-    "format": "",
-    "tooltip": false,
-    "on-click": "omarchy-toggle-nightlight"
-  }
-}
+../../../../stow/waybar/.config/waybar/modules/nightlight.jsonc

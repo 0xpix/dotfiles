@@ -1,0 +1,12 @@
+{
+  "custom/sunset": {
+    "format": "{}",
+    "return-type": "json",
+    "exec": "~/.config/waybar/scripts/nightlight-status.sh",
+    "interval": 5,
+    "tooltip": true,
+    "signal": 9,
+    "exec-on-event": true,
+    "on-click": "omarchy-toggle-nightlight"
+  }
+}

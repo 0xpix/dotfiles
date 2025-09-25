@@ -1,8 +1,1 @@
-{
-  "clock": {
-    "format": "{:L%A %H:%M}",
-    "format-alt": "{:L%d %B %Y}",
-    "tooltip": false,
-    "on-click-right": "omarchy-cmd-tzupdate"
-  }
-}
+../../../../stow/waybar/.config/waybar/modules/clock.jsonc

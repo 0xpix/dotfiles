@@ -1,0 +1,94 @@
+@import "../omarchy/current/theme/waybar.css";
+
+* {
+  background-color: transparent;
+  color: @foreground;
+  border: none;
+  border-radius: 0;
+  min-height: 0;
+  font-family: CaskaydiaMono Nerd Font;
+  font-size: 12px;
+}
+
+.modules-left {
+  margin-left: 8px;
+}
+
+.modules-right {
+  margin-right: 8px;
+}
+
+#workspaces button {
+  all: initial;
+  padding: 0 7px;
+  margin: 0 1.5px;
+  min-width: 9px;
+}
+
+#workspaces button.empty {
+  opacity: 0.5;
+}
+
+#tray,
+#cpu,
+#battery,
+#network,
+#bluetooth,
+#pulseaudio,
+#custom-omarchy,
+#custom-screenrecording-indicator,
+#custom-update,
+#power-profile {
+  min-width: 12px;
+  margin: 0 10px;
+  font-size: 13px;
+}
+
+#custom-expand-icon {
+  margin-right: 7px;
+}
+
+tooltip {
+  padding: 2px;
+}
+
+#custom-update {
+  font-size: 10px;
+}
+
+#clock {
+  margin: 0 8.75px;
+}
+
+.hidden {
+  opacity: 0;
+}
+
+#custom-screenrecording-indicator {
+  min-width: 12px;
+  margin-left: 8.75px;
+  font-size: 10px;
+}
+
+#custom-screenrecording-indicator.active {
+  color: #a55555;
+}
+
+#custom-sunset { margin: 0 7.5px; min-width: 12px; }
+#custom-sunset.active   { color: #e0a96d; } /* warm tint when ON */
+#custom-sunset.inactive { opacity: 0.75; }
+
+/* Group containers look like separate pills */
+.modules-left,
+.modules-center,
+.modules-right {
+  background-color: @background;
+  border: 1px solid alpha(@foreground, 0.15);
+  border-radius: 7px;
+  padding: 2px 6px;
+}
+
+/* Keep your edge spacing */
+.modules-left  { margin-left: 8px; }
+.modules-center{ margin: 0 8px; }
+.modules-right { margin-right: 8px; }

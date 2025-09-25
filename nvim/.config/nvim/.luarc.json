@@ -1,6 +1,1 @@
-{
-    "diagnostics.globals": [
-        "vim",
-        "Snacks"
-    ]
-}
+../../../stow/nvim/.config/nvim/.luarc.json
