@@ -1,78 +1,89 @@
-# --- fast & safe defaults ---
-setopt prompt_subst
-DISABLE_AUTO_UPDATE="true"
-DISABLE_MAGIC_FUNCTIONS="true"
-DISABLE_COMPFIX="true"
+# Enable Powerlevel10k instant prompt. Should stay close to the top of ~/.zshrc.
+# Initialization code that may require console input (password prompts, [y/n]
+# confirmations, etc.) must go above this block; everything else may go below.
+if [[ -r "${XDG_CACHE_HOME:-$HOME/.cache}/p10k-instant-prompt-${(%):-%n}.zsh" ]]; then
+  source "${XDG_CACHE_HOME:-$HOME/.cache}/p10k-instant-prompt-${(%):-%n}.zsh"
+fi
 
-# Guard: only run in zsh
-[ -n "$ZSH_VERSION" ] || return
+# Set the directory we want to store zinit and plugins
+ZINIT_HOME="${XDG_DATA_HOME:-${HOME}/.local/share}/zinit/zinit.git"
 
-# --- completion ---
-autoload -Uz compinit
-compinit -C
+# Download Zinit, if it's not there yet
+if [ ! -d "$ZINIT_HOME" ]; then
+   mkdir -p "$(dirname $ZINIT_HOME)"
+   git clone https://github.com/zdharma-continuum/zinit.git "$ZINIT_HOME"
+fi
 
-# --- Oh My Zsh (plugins only) ---
-export ZSH="$HOME/.oh-my-zsh"
-ZSH_THEME=""  # theme disabled; Starship handles prompt
+# Source/Load zinit
+source "${ZINIT_HOME}/zinit.zsh"
 
-plugins=(
-  git
-  zsh-autosuggestions
-  zsh-syntax-highlighting  # keep this last among plugins for best behavior
-  zsh-vi-mode
-  zoxide
-)
-source "$ZSH/oh-my-zsh.sh"
+# Add in Powerlevel10k
+zinit ice depth=1; zinit light romkatv/powerlevel10k
 
-# --- Starship prompt ---
-eval "$(starship init zsh)"
+# Add in zsh plugins
+zinit light zsh-users/zsh-syntax-highlighting
+zinit light zsh-users/zsh-completions
+zinit light zsh-users/zsh-autosuggestions
+zinit light Aloxaf/fzf-tab
 
-# --- uv integration (no conda) ---
-# Add uv completion and ensure ~/.local/bin (typical uv install path) is on PATH
+# Add in snippets
+zinit snippet OMZL::git.zsh
+zinit snippet OMZP::git
+zinit snippet OMZP::sudo
+zinit snippet OMZP::archlinux
+zinit snippet OMZP::aws
+zinit snippet OMZP::kubectl
+zinit snippet OMZP::kubectx
+zinit snippet OMZP::command-not-found
+
+# Load completions
+autoload -Uz compinit && compinit
+
+zinit cdreplay -q
+
+# Keybindings
+bindkey -e
+bindkey '^p' history-search-backward
+bindkey '^n' history-search-forward
+bindkey '^[w' kill-region
+
+# History
+HISTSIZE=5000
+HISTFILE=~/.zsh_history
+SAVEHIST=$HISTSIZE
+HISTDUP=erase
+setopt appendhistory
+setopt sharehistory
+setopt hist_ignore_space
+setopt hist_ignore_all_dups
+setopt hist_save_no_dups
+setopt hist_ignore_dups
+setopt hist_find_no_dups
+
+# Completion styling
+zstyle ':completion:*' matcher-list 'm:{a-z}={A-Za-z}'
+zstyle ':completion:*' list-colors "${(s.:.)LS_COLORS}"
+zstyle ':completion:*' menu no
+zstyle ':fzf-tab:complete:cd:*' fzf-preview 'ls --color $realpath'
+zstyle ':fzf-tab:complete:__zoxide_z:*' fzf-preview 'ls --color $realpath'
+
+# Aliases
+alias ls='ls --color'
+alias vim='nvim'
+alias c='clear'
+
+# Shell integrations
+eval "$(fzf --zsh)"
+eval "$(zoxide init --cmd cd zsh)"
+
+
+# --- Starship Prompt ---
+
+# --- uv integration ---
 export PATH="$HOME/.local/bin:$PATH"
-if command -v uv >/dev/null 2>&1; then
+if command -v uv &>/dev/null; then
   eval "$(uv generate-shell-completion zsh)"
 fi
 
-# --- key bindings ---
-globalias() {
-  if [[ $LBUFFER =~ '[a-zA-Z0-9]+$' ]]; then
-    zle _expand_alias
-    zle expand-word
-  fi
-  zle self-insert
-}
-zle -N globalias
-bindkey " " globalias
-bindkey "^[[Z" magic-space
-bindkey -M isearch " " magic-space
-
-# --- SSH agent (lazy) ---
-_load_ssh_agent() {
-  if [ -z "$SSH_AUTH_SOCK" ]; then
-    eval "$(ssh-agent -s)" > /dev/null
-    ssh-add ~/.ssh/id_github_sign_and_auth 2>/dev/null
-  fi
-}
-autoload -U add-zsh-hook
-add-zsh-hook precmd _load_ssh_agent
-
-# --- PATH extras ---
-export VOLTA_HOME="$HOME/.volta"
-export PATH="$VOLTA_HOME/bin:$PATH"
-# (remove the wrong user path)
-# export PATH="$PATH:/home/scott/.turso"   # <- deleted
-
-# --- autosuggestions tweaks ---
-ZSH_AUTOSUGGEST_HIGHLIGHT_STYLE="fg=#663399,standout"
-ZSH_AUTOSUGGEST_BUFFER_MAX_SIZE="20"
-ZSH_AUTOSUGGEST_USE_ASYNC=1
-
-# --- history & mode ---
-HISTFILE=~/.histfile
-HISTSIZE=1000
-SAVEHIST=1000
-bindkey -e
-
-# --- aliases ---
-[ -f ~/.zsh_aliases ] && source ~/.zsh_aliases
+# To customize prompt, run `p10k configure` or edit ~/.p10k.zsh.
+[[ ! -f ~/.p10k.zsh ]] || source ~/.p10k.zsh
