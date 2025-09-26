@@ -9,36 +9,10 @@ stow:
   - branding
 
 packages:
-  common:
-    - git
-    - curl
-    - stow
-    - zsh
-    - python3
-    - ghostty
-    - zen-browser
-  arch:
-    - neovim
-    - ripgrep
-    - fd
-    - python-yaml
-  debian:
-    - neovim
-    - ripgrep
-    - fd-find
-    - python3-yaml
-    - python3-pip
-  fedora:
-    - neovim
-    - ripgrep
-    - fd-find
-    - python3-pyyaml
-    - python3-pip
-  suse:
-    - neovim
-    - ripgrep
-    - fd
-    - python3-PyYAML
+  - stow
+  - zsh
+  - ghostty
+  - zen-browser-bin
 
 repos:
   - dest: ~/.local/share/zinit
