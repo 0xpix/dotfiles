@@ -2,8 +2,8 @@
   "custom/idle": {
     "format": "{icon}",
     "format-icons": {
-      "idle":   "💤",
-      "active": "⚡"
+      "idle":   " \udb81\udeca ",
+      "active": " \udb80\udd76 "
     },
     "return-type": "json",
     "exec": "/home/pix/.config/waybar/scripts/idle-status.sh",
@@ -11,6 +11,7 @@
     "exec-on-event": true,                  // re-run immediately on click
     "on-click": "omarchy-toggle-idle",
     "signal": 10,
-    "tooltip": false
+    "tooltip-format": "Full: Active mode\nEmpty: Idle mode",
+    "tooltip": true
   }
 }
