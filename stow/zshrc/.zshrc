@@ -70,7 +70,9 @@ zstyle ':fzf-tab:complete:__zoxide_z:*' fzf-preview 'ls --color $realpath'
 
 # Shell integrations
 eval "$(fzf --zsh)"
-eval "$(zoxide init --cmd cd zsh)"
+if command -v zoxide &> /dev/null; then
+  eval "$(zoxide init zsh)"
+fi
 
 # --- uv integration ---
 export PATH="$HOME/.local/bin:$PATH"
@@ -85,3 +87,11 @@ fi
 alias c='clear'
 source ~/.local/share/omarchy/default/bash/aliases
 source ~/.local/share/omarchy/default/bash/functions
+
+# Alias for uv environment loader
+alias uvenv='uv venv .'
+alias uvd='deactivate'
+alias uva='source .venv/bin/activate'
+
+# Load env variables
+. "$HOME/.local/share/../bin/env"
