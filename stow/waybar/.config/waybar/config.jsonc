@@ -6,7 +6,9 @@
     "modules/cpu.jsonc",
     "modules/network.jsonc",
     "modules/pulseaudio.jsonc",
-    "modules/sunset.jsonc"
+    "modules/sunset.jsonc",
+    "modules/idle.jsonc",
+    "modules/theme-switch.jsonc"
   ],
 
   "reload_style_on_change": true,
@@ -16,7 +18,7 @@
   "height": 26,
 
   "modules-left": ["custom/omarchy", "hyprland/workspaces"],
-  "modules-center": ["clock", "custom/update", "custom/screenrecording-indicator"],
+  "modules-center": ["custom/theme", "clock", "custom/idle", "custom/update", "custom/screenrecording-indicator"],
   "modules-right": [
     "group/tray-expander",
     "network",
