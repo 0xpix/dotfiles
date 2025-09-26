@@ -326,6 +326,209 @@ def selective_cleanup_worker(files: list[str], dirs: list[str], logger):
         'dry_run': dry,
     }
 
+# -----------------------------
+# Themes discovery and copying
+# -----------------------------
+def theme_sources() -> list[pathlib.Path]:
+    """Return ordered list of existing source dirs for themes.
+    Env override DOTFILES_THEMES_SRC=path1:path2 (relative paths resolved against repo ROOT).
+    Default order (earlier preferred): ./themes, ./assets/themes, ./stow/omarchy/.config/omarchy/themes
+    """
+    env = os.getenv("DOTFILES_THEMES_SRC")
+    sources: list[pathlib.Path] = []
+    if env:
+        for raw in env.split(":" ):
+            if not raw:
+                continue
+            p = pathlib.Path(raw)
+            if not p.is_absolute():
+                p = (ROOT / p)
+            p = p.expanduser()
+            try:
+                p = p.resolve()
+            except Exception:
+                p = p.absolute()
+            if p.exists() and p.is_dir():
+                sources.append(p)
+        return sources
+
+    defaults = [
+        ROOT / "themes",
+        ROOT / "assets" / "themes",
+        ROOT / "stow" / "omarchy" / ".config" / "omarchy" / "themes",
+    ]
+    for d in defaults:
+        try:
+            if d.exists() and d.is_dir():
+                sources.append(d.resolve())
+        except Exception:
+            pass
+    return sources
+
+def discover_themes() -> dict[str, pathlib.Path]:
+    """Return {theme_name: source_path}. Prefer earlier sources on name conflicts.
+    - theme_name: folder name or file stem.
+    - source_path: absolute path to the folder or file in the repo.
+    Includes top-level files with extensions: .json, .toml, .ini, .css
+    """
+    exts = {".json", ".toml", ".ini", ".css"}
+    result: dict[str, pathlib.Path] = {}
+    for src_dir in theme_sources():
+        try:
+            for entry in sorted(src_dir.iterdir(), key=lambda p: p.name.lower()):
+                name = None
+                if entry.name == ".git":
+                    continue
+                if entry.is_dir():
+                    name = entry.name
+                elif entry.is_file() and entry.suffix.lower() in exts:
+                    name = entry.stem
+                if not name:
+                    continue
+                if name not in result:
+                    try:
+                        result[name] = entry.resolve()
+                    except Exception:
+                        result[name] = entry.absolute()
+        except Exception:
+            # Skip unreadable source directories
+            continue
+    return result
+
+def ensure_dest() -> pathlib.Path:
+    """Create and return Path('~/.config/omarchy/themes').expanduser().resolve()"""
+    home = pathlib.Path(os.path.expanduser("~"))
+    dest = (home / ".config" / "omarchy" / "themes").expanduser()
+    dest.mkdir(parents=True, exist_ok=True)
+    try:
+        dest = dest.resolve()
+    except Exception:
+        dest = dest.absolute()
+    return dest
+
+def _safe_remove_target(target: pathlib.Path, logger):
+    """Remove target path safely (file/symlink or directory). Do not follow symlinks."""
+    try:
+        if target.is_symlink() or target.is_file():
+            target.unlink(missing_ok=True)
+            logger("success", f"removed existing: {target}")
+        elif target.exists() and target.is_dir():
+            # Ensure not a symlinked dir
+            try:
+                if target.is_symlink():
+                    target.unlink(missing_ok=True)
+                    logger("success", f"removed symlink: {target}")
+                else:
+                    shutil.rmtree(target)
+                    logger("success", f"removed directory: {target}")
+            except Exception as e:
+                logger("error", f"failed removing {target}: {e}")
+                raise
+    except Exception as e:
+        logger("error", f"failed to remove {target}: {e}")
+        raise
+
+def copy_theme(src: pathlib.Path, dst_root: pathlib.Path, force: bool, logger) -> tuple[bool, str]:
+    """Copy one theme (folder or file) to dst_root/<name>.
+    - If force: remove existing target (file or dir) first (unlink or rmtree).
+    - Else: merge directories, overwrite files.
+    - Return (ok, theme_name); log steps and errors.
+    """
+    src = src.expanduser()
+    try:
+        src_resolved = src.resolve()
+    except Exception:
+        src_resolved = src.absolute()
+    name = src_resolved.name if src_resolved.is_dir() else src_resolved.stem
+
+    # Compute destination target path
+    if src_resolved.is_file():
+        dst_target = dst_root / src_resolved.name  # keep extension
+    else:
+        dst_target = dst_root / name
+
+    # Guard destination path
+    try:
+        dst_root_res = dst_root.resolve()
+        dst_target_res = dst_target.resolve() if dst_target.exists() else dst_target
+        if not dst_target_res.absolute().is_relative_to(dst_root_res):
+            logger("error", f"refuse to write outside destination: {dst_target}")
+            return False, name
+    except Exception:
+        pass
+
+    # Force remove if requested
+    if force and (dst_target.exists() or dst_target.is_symlink()):
+        logger("info", f"force remove existing target: {dst_target}")
+        _safe_remove_target(dst_target, logger)
+
+    # Copy
+    try:
+        if src_resolved.is_file():
+            dst_root.mkdir(parents=True, exist_ok=True)
+            logger("info", f"copy file: {src_resolved} -> {dst_target}")
+            shutil.copy2(src_resolved, dst_target)
+        elif src_resolved.is_dir():
+            # Merge copy (create dirs, overwrite files)
+            for root, dnames, fnames in os.walk(src_resolved, topdown=True, followlinks=False):
+                # Skip .git
+                dnames[:] = [d for d in dnames if d != ".git"]
+                rel_root = pathlib.Path(root).relative_to(src_resolved)
+                out_dir = dst_target / rel_root
+                out_dir.mkdir(parents=True, exist_ok=True)
+                for f in fnames:
+                    s_file = pathlib.Path(root) / f
+                    d_file = out_dir / f
+                    logger("info", f"copy: {s_file} -> {d_file}")
+                    shutil.copy2(s_file, d_file)
+        else:
+            logger("warn", f"skip: not a regular file or directory: {src_resolved}")
+            return False, name
+        logger("success", f"copied theme: {name}")
+        return True, name
+    except Exception as e:
+        logger("error", f"failed copy for theme {name}: {e}")
+        return False, name
+
+def copy_themes_worker(selected_names: list[str], logger) -> dict:
+    """Copy multiple themes.
+    Respects DOTFILES_THEMES_DRY and DOTFILES_THEMES_FORCE.
+    Returns summary dict.
+    """
+    dry = os.getenv("DOTFILES_THEMES_DRY", "0") in ("1", "true", "yes", "on")
+    force = os.getenv("DOTFILES_THEMES_FORCE", "0") in ("1", "true", "yes", "on")
+
+    themes = discover_themes()
+    dest = ensure_dest()
+
+    ok = 0
+    skipped = 0
+    errors = 0
+
+    logger("info", f"Copying {len(selected_names)} theme(s) to {dest}" + (" [DRY RUN]" if dry else ""))
+    for name in selected_names:
+        src = themes.get(name)
+        if not src:
+            logger("warn", f"skip: source not found for theme '{name}'")
+            skipped += 1
+            continue
+        if dry:
+            # Compute planned destination
+            target = (dest / (src.name if src.is_file() else name))
+            logger("info", f"plan: copy {src} -> {target}" + (" (force replace)" if force else ""))
+            continue
+        try:
+            ok_single, _ = copy_theme(src, dest, force, logger)
+            if ok_single:
+                ok += 1
+            else:
+                errors += 1
+        except Exception as e:
+            logger("error", f"exception copying '{name}': {e}")
+            errors += 1
+
+    return {"ok": ok, "skipped": skipped, "errors": errors, "dry": dry}
+
 def check_stow():
     """Check if stow is installed"""
     return subprocess.call("command -v stow >/dev/null 2>&1", shell=True) == 0
@@ -580,19 +783,23 @@ def main(stdscr):
     plugin_repos = [r for r in cfg.get("repos", []) if "/.oh-my-zsh/custom/plugins/" in r.get("dest", "")]
     plugins = [r["dest"].split("/.oh-my-zsh/custom/plugins/")[-1] for r in plugin_repos]
 
-    # UI state - three panes: stow, packages, plugins
-    panes = ["Stow Packages", "System Packages", "Plugins"]
+    # UI state - panes: stow, themes, packages, plugins
+    panes = ["Stow Packages", "Themes", "System Packages", "Plugins"]
     current_pane = 0
     idx = 0
 
     # Selection state for each pane
     selected_stow = set(stow_pkgs)
+    themes_map = discover_themes()
+    theme_names = sorted(themes_map.keys())
+    selected_themes = set(theme_names)
     selected_pkgs = set(sys_pkgs)
     selected_plugins = set(plugins)
 
     # Filter state
     filter_text = ""
     filtered_stow = stow_pkgs[:]
+    filtered_themes = theme_names[:]
     filtered_pkgs = sys_pkgs[:]
     filtered_plugins = plugins[:]
 
@@ -619,22 +826,27 @@ def main(stdscr):
         if current_pane == 0:
             return stow_pkgs, selected_stow, filtered_stow
         elif current_pane == 1:
+            return theme_names, selected_themes, filtered_themes
+        elif current_pane == 2:
             return sys_pkgs, selected_pkgs, filtered_pkgs
         else:
             return plugins, selected_plugins, filtered_plugins
 
     def apply_filter():
         """Apply current filter to all panes"""
-        nonlocal filtered_stow, filtered_pkgs, filtered_plugins, idx
+        nonlocal filtered_stow, filtered_themes, filtered_pkgs, filtered_plugins, idx
 
         if not filter_text:
             filtered_stow = stow_pkgs[:]
+            filtered_themes = theme_names[:]
             filtered_pkgs = sys_pkgs[:]
             filtered_plugins = plugins[:]
         else:
-            filtered_stow = [p for p in stow_pkgs if filter_text.lower() in p.lower()]
-            filtered_pkgs = [p for p in sys_pkgs if filter_text.lower() in p.lower()]
-            filtered_plugins = [p for p in plugins if filter_text.lower() in p.lower()]
+            ft = filter_text.lower()
+            filtered_stow = [p for p in stow_pkgs if ft in p.lower()]
+            filtered_themes = [t for t in theme_names if ft in t.lower()]
+            filtered_pkgs = [p for p in sys_pkgs if ft in p.lower()]
+            filtered_plugins = [p for p in plugins if ft in p.lower()]
 
         # Adjust index for current pane
         _, _, current_filtered = get_current_data()
@@ -671,6 +883,8 @@ def main(stdscr):
         help_line = HELP_TEXT
         if current_pane == 0:
             help_line = f"{HELP_TEXT}  |  DRY=DOTFILES_REMOVE_DRY=1  FORCE=DOTFILES_REMOVE_FORCE=1"
+        elif current_pane == 1:
+            help_line = f"{HELP_TEXT}  |  THEME DRY=DOTFILES_THEMES_DRY=1  FORCE=DOTFILES_THEMES_FORCE=1"
         help_text = textwrap.shorten(help_line, W-4, placeholder='...')
         try:
             stdscr.addstr(1, 2, help_text)
@@ -800,7 +1014,7 @@ def main(stdscr):
                 "  I/i         Invert selection",
                 "",
                 "Actions:",
-                "  Enter       Stow selected",
+                "  Enter       Stow selected / Copy selected themes",
                 "  D           Selective Cleanup (remove only paths present in stow)",
                 "  r           Refresh packages",
                 "  c           Clear log",
@@ -1028,26 +1242,47 @@ def main(stdscr):
             elif not is_running:
                 if current_pane == 0:  # Stow packages
                     run_async("Stow packages", stow_selected)
-                elif current_pane == 1:  # System packages
+                elif current_pane == 1:  # Themes copy
+                    if not selected_themes:
+                        ui_events.put(("toast", False, f"{ICONS['warn']} No themes selected", ["Select one or more themes"]))
+                    else:
+                        def do_copy():
+                            names = sorted(selected_themes)
+                            return copy_themes_worker(names, logger)
+
+                        def after_copy(summary):
+                            dry = summary.get("dry")
+                            ok = summary.get("ok", 0)
+                            errors = summary.get("errors", 0)
+                            skipped = summary.get("skipped", 0)
+                            title = f"{ICONS['success']} Copied {ok} theme(s)" if errors == 0 else f"{ICONS['warn']} Copy completed with issues"
+                            suffix = " — dry run" if dry else ""
+                            ui_events.put(("toast", errors > 0, title, [f"ok {ok}, skipped {skipped}, errors {errors}{suffix}"]))
+
+                        run_async("Copying themes…", do_copy, on_success=after_copy)
+                elif current_pane == 2:  # System packages
                     if ensure_sudo_cached_on_main(stdscr, logger):
                         run_async("Install packages", install_packages_no_prompt)
-                elif current_pane == 2:  # Plugins
+                elif current_pane == 3:  # Plugins
                     run_async("Clone plugins", clone_plugins)
         elif c == ord('r'):  # Refresh
             # Reload all data
             cfg = load_config()
             stow_pkgs = list_packages()
+            themes_map = discover_themes()
+            theme_names = sorted(themes_map.keys())
             sys_pkgs = package_plan(cfg)
             plugin_repos = [r for r in cfg.get("repos", []) if "/.oh-my-zsh/custom/plugins/" in r.get("dest", "")]
             plugins = [r["dest"].split("/.oh-my-zsh/custom/plugins/")[-1] for r in plugin_repos]
 
             # Preserve valid selections
             selected_stow &= set(stow_pkgs)
+            selected_themes &= set(theme_names)
             selected_pkgs &= set(sys_pkgs)
             selected_plugins &= set(plugins)
 
             apply_filter()
-            logger("info", "Data refreshed from configuration")
+            logger("info", "Data refreshed from configuration and theme sources")
         elif c == ord('c'):  # Clear log
             log.clear()
 
