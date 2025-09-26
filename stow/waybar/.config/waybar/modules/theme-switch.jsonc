@@ -1,0 +1,9 @@
+{
+  "custom/theme": {
+    "format": "🎨",
+    "tooltip-format": "Left: dark (rose-pine-dark)\nRight: light (rose-pine-light)",
+    "on-click": "omarchy-theme-set rose-pine-dark; pkill -USR2 waybar",
+    "on-click-right": "omarchy-theme-set rose-pine-light; pkill -USR2 waybar",
+    "tooltip": true
+  }
+}
