@@ -2,7 +2,7 @@
 # Polished TUI for dotfiles management - stow, packages, and plugins
 # Enhanced with colors, search, better layout, and robust error handling
 
-import curses, os, subprocess, pathlib, textwrap, shlex, threading, time, queue
+import curses, os, subprocess, pathlib, textwrap, shlex, threading, time, queue, shutil
 from .ops import load_config, ensure_packages, clone_repos, package_plan
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
@@ -13,7 +13,7 @@ ui_events = queue.Queue()
 
 # Icons and messages
 ICONS = {"info": "i", "success": "✓", "warn": "⚠", "error": "✗"}
-HELP_TEXT = "SPACE select  ENTER run  TAB switch pane  A/U/I all/none/invert  / filter  ? help  r refresh  q quit"
+HELP_TEXT = "SPACE select  ENTER run  TAB switch pane  A/U/I all/none/invert  / filter  ? help  r refresh  D cleanup  q quit"
 
 # Color pairs (will be initialized if colors available)
 COLORS = {}
@@ -52,6 +52,279 @@ def list_packages():
     if not STOW_DIR.exists():
         return []
     return sorted([p.name for p in STOW_DIR.iterdir() if p.is_dir()])
+
+def inside_home_guard(path: pathlib.Path) -> bool:
+    """Return True iff path is lexically under $HOME (no traversal above HOME).
+    This guard does NOT follow symlinks; use additional checks for recursive deletes.
+    """
+    try:
+        home = pathlib.Path(os.path.expanduser("~")).absolute()
+        p = pathlib.Path(path).expanduser().absolute()
+        return p.is_relative_to(home)
+    except Exception:
+        return False
+
+def enumerate_stow_targets_for_pkgs(pkgs) -> tuple[list[str], list[str]]:
+    """Walk stow/<pkg> trees and return (files, dirs) as HOME-absolute target paths,
+    exactly mirroring Stow mapping with -t "$HOME". Skip .git folders. De-duplicate and sort.
+    """
+    home = pathlib.Path(os.path.expanduser("~"))
+    files: set[str] = set()
+    dirs: set[str] = set()
+
+    for pkg in sorted(set(pkgs)):
+        pkg_dir = STOW_DIR / pkg
+        if not pkg_dir.exists() or not pkg_dir.is_dir():
+            continue
+        # Walk without following symlinks
+        for root, dnames, fnames in os.walk(pkg_dir, topdown=True, followlinks=False):
+            # Skip VCS dirs
+            dnames[:] = [d for d in dnames if d != ".git"]
+            root_path = pathlib.Path(root)
+            rel_root = root_path.relative_to(pkg_dir)
+            # Add directories (excluding the package root itself)
+            if str(rel_root) != ".":
+                target_dir = home / rel_root
+                if inside_home_guard(target_dir):
+                    dirs.add(str(target_dir))
+            # Add subdirectories explicitly as targets too
+            for d in dnames:
+                rel_dir = (rel_root / d)
+                if str(rel_dir) == ".":
+                    continue
+                target_dir = home / rel_dir
+                if inside_home_guard(target_dir):
+                    dirs.add(str(target_dir))
+            # Add files (regular or symlink) -> treated as file targets
+            for f in fnames:
+                rel_file = (rel_root / f)
+                target_file = home / rel_file
+                if inside_home_guard(target_file):
+                    files.add(str(target_file))
+
+    # De-duplicate and sort; ensure deterministic order
+    files_list = sorted(files)
+    # For directory deletion, remove deeper ones first later; but here just sort
+    dirs_list = sorted(dirs)
+    return files_list, dirs_list
+
+def confirm_remove_dialog(stdscr, paths: list[str]) -> bool:
+    """Centered modal listing planned removals. Ask user to type the exact count to confirm. ESC cancels."""
+    total = len(paths)
+    h, w = stdscr.getmaxyx()
+    box_w = min(80, w - 4)
+    # Leave space for header, footer, input
+    max_list_lines = max(5, min(18, h - 10))
+    visible = paths[:max_list_lines]
+    more = total - len(visible)
+
+    # Draw loop (simple, static list; input at bottom)
+    box_h = 8 + len(visible) + (1 if more > 0 else 0)
+    start_x, start_y = (w - box_w) // 2, (h - box_h) // 2
+
+    typed = ""
+    curses.curs_set(1)
+    try:
+        while True:
+            # Clear area
+            for y in range(start_y, start_y + box_h):
+                try:
+                    stdscr.addstr(y, start_x, " " * box_w, curses.A_REVERSE)
+                except curses.error:
+                    pass
+            # Border
+            try:
+                stdscr.addstr(start_y, start_x, "+" + "-" * (box_w - 2) + "+", curses.A_REVERSE)
+                for y in range(start_y + 1, start_y + box_h - 1):
+                    stdscr.addstr(y, start_x, "|", curses.A_REVERSE)
+                    stdscr.addstr(y, start_x + box_w - 1, "|", curses.A_REVERSE)
+                stdscr.addstr(start_y + box_h - 1, start_x, "+" + "-" * (box_w - 2) + "+", curses.A_REVERSE)
+            except curses.error:
+                pass
+
+            title = f"Selective Cleanup: {total} item(s) will be removed"
+            hint = f"Type {total} to confirm, Esc to cancel"
+            try:
+                stdscr.addstr(start_y + 1, start_x + 2, title[:box_w-4], curses.A_REVERSE | curses.A_BOLD)
+            except curses.error:
+                pass
+
+            list_y = start_y + 3
+            for i, p in enumerate(visible):
+                line = ("~" + str(pathlib.Path(p).expanduser()).replace(str(pathlib.Path.home()), "")) if p.startswith(str(pathlib.Path.home())) else p
+                try:
+                    stdscr.addstr(list_y + i, start_x + 2, f"- {line}"[:box_w-4], curses.A_REVERSE)
+                except curses.error:
+                    pass
+            if more > 0:
+                try:
+                    stdscr.addstr(list_y + len(visible), start_x + 2, f"... and {more} more"[:box_w-4], curses.A_REVERSE | curses.A_DIM)
+                except curses.error:
+                    pass
+
+            input_y = start_y + box_h - 3
+            try:
+                stdscr.addstr(input_y, start_x + 2, hint[:box_w-4], curses.A_REVERSE)
+                stdscr.addstr(input_y + 1, start_x + 2, ("Confirm count: " + typed)[:box_w-4], curses.A_REVERSE)
+                stdscr.move(input_y + 1, start_x + 2 + len("Confirm count: ") + len(typed))
+                stdscr.refresh()
+            except curses.error:
+                pass
+
+            key = stdscr.getch()
+            if key in (27,):  # ESC
+                return False
+            elif key in (10, 13):  # Enter => accept if matches
+                try:
+                    if int(typed) == total:
+                        return True
+                except Exception:
+                    pass
+                return False
+            elif key in (curses.KEY_BACKSPACE, 127, 8):
+                if typed:
+                    typed = typed[:-1]
+            elif 48 <= key <= 57:  # digits
+                if len(typed) < 10:
+                    typed += chr(key)
+            else:
+                # ignore others
+                pass
+    finally:
+        try:
+            curses.curs_set(0)
+        except curses.error:
+            pass
+
+def selective_cleanup_worker(files: list[str], dirs: list[str], logger):
+    """Headless worker performing selective cleanup.
+      - If DOTFILES_REMOVE_DRY: log actions only.
+      - Remove files/symlinks via unlink; log each.
+      - Remove dirs: default rmdir if empty; if DOTFILES_REMOVE_FORCE: rmtree.
+      - Return summary dict: {'files_removed': n1, 'dirs_removed': n2, 'skipped': k, 'errors': e, 'dry_run': bool}
+    """
+    dry = os.getenv("DOTFILES_REMOVE_DRY", "0") in ("1", "true", "yes", "on")
+    force = os.getenv("DOTFILES_REMOVE_FORCE", "0") in ("1", "true", "yes", "on")
+
+    files_removed = 0
+    dirs_removed = 0
+    skipped = 0
+    errors = 0
+
+    home = pathlib.Path(os.path.expanduser("~")).absolute()
+
+    # Remove files and symlinks first
+    logger("info", f"Planned removals: {len(files)} file(s)/link(s), {len(dirs)} dir(s)" + (" [DRY RUN]" if dry else ""))
+
+    for f in files:
+        try:
+            p = pathlib.Path(f)
+            if not inside_home_guard(p):
+                logger("warn", f"skip: outside $HOME (guard): {f}")
+                skipped += 1
+                continue
+            if not p.exists() and not p.is_symlink():
+                logger("info", f"skip: not found: {f}")
+                skipped += 1
+                continue
+            # We never follow symlinks for file targets; unlink() handles both
+            if dry:
+                kind = "symlink" if p.is_symlink() else ("file" if p.exists() else "file/symlink")
+                logger("info", f"plan: unlink {kind}: {f}")
+                continue
+            try:
+                p.unlink(missing_ok=True)
+                logger("success", f"removed: {f}")
+                files_removed += 1
+            except Exception as e:
+                logger("error", f"failed to remove file/link: {f}: {e}")
+                errors += 1
+        except Exception as e:
+            logger("error", f"error processing file: {f}: {e}")
+            errors += 1
+
+    # Then directories; attempt to remove deepest first to handle nesting
+    # Sort by depth descending
+    dirs_sorted = sorted(dirs, key=lambda s: s.count(os.sep), reverse=True)
+
+    for d in dirs_sorted:
+        try:
+            p = pathlib.Path(d)
+            if not inside_home_guard(p):
+                logger("warn", f"skip dir: outside $HOME (guard): {d}")
+                skipped += 1
+                continue
+            if not p.exists() and not p.is_symlink():
+                logger("info", f"skip dir: not found: {d}")
+                skipped += 1
+                continue
+            # If target is a file or symlink, treat like file unlink attempt
+            if p.is_file() or p.is_symlink():
+                if dry:
+                    logger("info", f"plan: unlink file/symlink for dir target: {d}")
+                    continue
+                try:
+                    p.unlink(missing_ok=True)
+                    logger("success", f"removed file/symlink for dir target: {d}")
+                    files_removed += 1
+                except Exception as e:
+                    logger("error", f"failed to unlink for dir target: {d}: {e}")
+                    errors += 1
+                continue
+
+            # It's a directory at this point
+            if dry:
+                action = "rmtree" if force else "rmdir (if empty)"
+                logger("info", f"plan: {action}: {d}")
+                continue
+
+            # Extra safety for recursive deletes: ensure resolved path under HOME and not a symlink
+            if force:
+                try:
+                    if p.is_symlink():
+                        # Do not rmtree symlink dirs; just unlink
+                        p.unlink(missing_ok=True)
+                        logger("success", f"removed symlink dir: {d}")
+                        files_removed += 1
+                    else:
+                        resolved = p.resolve()
+                        if not resolved.is_relative_to(home):
+                            logger("error", f"refuse rmtree outside $HOME after resolve: {d}")
+                            errors += 1
+                        else:
+                            shutil.rmtree(p)
+                            logger("success", f"removed dir (recursive): {d}")
+                            dirs_removed += 1
+                except Exception as e:
+                    logger("error", f"failed to remove dir recursively: {d}: {e}")
+                    errors += 1
+            else:
+                try:
+                    os.rmdir(p)
+                    logger("success", f"removed dir (empty): {d}")
+                    dirs_removed += 1
+                except OSError as e:
+                    if getattr(e, 'errno', None) == 39 or 'Directory not empty' in str(e):
+                        logger("info", f"skip dir not empty: {d} (set DOTFILES_REMOVE_FORCE=1 to force)")
+                        skipped += 1
+                    else:
+                        logger("error", f"failed to rmdir: {d}: {e}")
+                        errors += 1
+                except Exception as e:
+                    logger("error", f"failed to rmdir: {d}: {e}")
+                    errors += 1
+
+        except Exception as e:
+            logger("error", f"error processing dir: {d}: {e}")
+            errors += 1
+
+    return {
+        'files_removed': files_removed,
+        'dirs_removed': dirs_removed,
+        'skipped': skipped,
+        'errors': errors,
+        'dry_run': dry,
+    }
 
 def check_stow():
     """Check if stow is installed"""
@@ -325,6 +598,7 @@ def main(stdscr):
 
     log = LogBuf()
     is_running = False
+    running_label = None
     show_help = False
     action_thread = None
     last_draw = 0.0
@@ -394,7 +668,10 @@ def main(stdscr):
             pass
 
         # Help bar
-        help_text = textwrap.shorten(HELP_TEXT, W-4, placeholder='...')
+        help_line = HELP_TEXT
+        if current_pane == 0:
+            help_line = f"{HELP_TEXT}  |  DRY=DOTFILES_REMOVE_DRY=1  FORCE=DOTFILES_REMOVE_FORCE=1"
+        help_text = textwrap.shorten(help_line, W-4, placeholder='...')
         try:
             stdscr.addstr(1, 2, help_text)
         except curses.error:
@@ -495,7 +772,8 @@ def main(stdscr):
             frame = int(time.time() * 5) % len(spinner_symbols)
             last_spinner_frame = frame
             spin = spinner_symbols[frame]
-            status_parts.append(f"{spin} RUNNING")
+            label = running_label or "RUNNING"
+            status_parts.append(f"{spin} {label}")
         else:
             status_parts.append("● READY")
         if filter_text:
@@ -523,6 +801,7 @@ def main(stdscr):
                 "",
                 "Actions:",
                 "  Enter       Stow selected",
+                "  D           Selective Cleanup (remove only paths present in stow)",
                 "  r           Refresh packages",
                 "  c           Clear log",
                 "",
@@ -530,7 +809,11 @@ def main(stdscr):
                 "  /           Filter packages",
                 "  F           Toggle log follow",
                 "  G           Jump to log bottom",
-                "  q, Esc      Quit"
+                "  q, Esc      Quit",
+                "",
+                "Env hints:",
+                "  DRY:   DOTFILES_REMOVE_DRY=1",
+                "  FORCE: DOTFILES_REMOVE_FORCE=1",
             ]
             toast(stdscr, "Help", help_lines)
 
@@ -538,27 +821,32 @@ def main(stdscr):
         last_draw = time.time()
         log.dirty = False
 
-    def run_async(name, func):
+    def run_async(name, func, on_success=None):
         """Run function asynchronously; worker is headless (no curses)."""
-        nonlocal action_thread, is_running
+        nonlocal action_thread, is_running, running_label
         if action_thread and action_thread.is_alive():
             logger("warn", "Operation already running")
             return
         log.clear()
         logger("info", f"Starting {name}...")
         is_running = True
+        running_label = name
         draw()
 
         def wrapper():
-            nonlocal is_running
+            nonlocal is_running, running_label
             try:
-                func()
-                ui_events.put(("toast", False, f"{ICONS['success']} {name} Complete", ["Operation completed successfully"]))
+                result = func()
+                if callable(on_success):
+                    on_success(result)
+                else:
+                    ui_events.put(("toast", False, f"{ICONS['success']} {name} Complete", ["Operation completed successfully"]))
             except Exception as e:
                 logger("error", f"{name} failed: {e}")
                 ui_events.put(("toast", True, f"{ICONS['error']} {name} Failed", [str(e), "Check the log panel"]))
             finally:
                 is_running = False
+                running_label = None
 
         action_thread = threading.Thread(target=wrapper, daemon=True)
         action_thread.start()
@@ -807,6 +1095,41 @@ def main(stdscr):
         elif c in (ord('G'), ord('g')):  # Jump to log bottom
             log.follow = True
             log.scroll = 0
+
+        # Selective Cleanup (Shift+D) only in Stow pane
+        elif c == ord('D') and current_pane == 0 and not is_running:
+            if not selected_stow:
+                ui_events.put(("toast", False, f"{ICONS['warn']} No stow packages selected", ["Select one or more packages in Stow pane"]))
+            else:
+                selected_list = sorted(selected_stow)
+                if not STOW_DIR.exists():
+                    ui_events.put(("toast", True, f"{ICONS['error']} Missing stow directory", [str(STOW_DIR)]))
+                else:
+                    files, dirs = enumerate_stow_targets_for_pkgs(selected_list)
+                    targets_preview = files + dirs
+                    if not targets_preview:
+                        ui_events.put(("toast", False, f"{ICONS['warn']} Nothing to remove", ["No targets derived from selected stow packages"]))
+                    else:
+                        if confirm_remove_dialog(stdscr, targets_preview):
+                            def do_cleanup():
+                                return selective_cleanup_worker(files, dirs, logger)
+
+                            def after_cleanup(summary):
+                                dry = summary.get('dry_run')
+                                files_removed = summary.get('files_removed', 0)
+                                dirs_removed = summary.get('dirs_removed', 0)
+                                skipped = summary.get('skipped', 0)
+                                errors = summary.get('errors', 0)
+                                title = f"{ICONS['success']} Selective cleanup complete" if errors == 0 else f"{ICONS['warn']} Selective cleanup completed with issues"
+                                suffix = " [DRY RUN]" if dry else ""
+                                lines = [
+                                    f"removed files {files_removed}, removed dirs {dirs_removed}, skipped {skipped}, errors {errors}{suffix}",
+                                ]
+                                ui_events.put(("toast", errors > 0, title, lines))
+
+                            run_async("Cleaning…", do_cleanup, on_success=after_cleanup)
+                        else:
+                            logger("info", "Selective cleanup cancelled")
 
         # Decide if redraw needed
         need_draw = False
