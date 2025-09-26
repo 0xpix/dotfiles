@@ -6,7 +6,7 @@
       "active": " \udb80\udd76 "
     },
     "return-type": "json",
-    "exec": "/home/pix/.config/waybar/scripts/idle-status.sh",
+    "exec": "~/.config/waybar/scripts/idle-status.sh",
     "interval": 1,                          // small poll to catch late flips
     "exec-on-event": true,                  // re-run immediately on click
     "on-click": "omarchy-toggle-idle",
