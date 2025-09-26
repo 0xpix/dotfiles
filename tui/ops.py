@@ -65,72 +65,87 @@ def load_config():
         return yaml.safe_load(f) or {}
 
 def detect_distro():
-    data = {}
-    try:
-        with open("/etc/os-release") as f:
-            for line in f:
-                if "=" in line:
-                    k,v = line.strip().split("=",1)
-                    data[k] = v.strip('"')
-    except FileNotFoundError:
-        pass
-    id_like = (data.get("ID_LIKE","") + " " + data.get("ID"," ")).lower()
-    if "arch" in id_like:
-        return "arch"
-    if any(x in id_like for x in ["debian","ubuntu","linuxmint","elementary"]):
-        return "debian"
-    if "fedora" in id_like or "rhel" in id_like or "centos" in id_like:
-        return "fedora"
-    if "suse" in id_like or "opensuse" in id_like:
-        return "suse"
-    return "unknown"
+    """Kept for backward compatibility but unused. Arch is assumed."""
+    return "arch"
 
 def ensure_packages(pkgs, logger: Logger | None = None):
-    distro = detect_distro()
-    if distro == "arch":
-        update_cmd  = "pacman -Sy --noconfirm"
-        install_cmd = "pacman -S --needed --noconfirm"
-    elif distro == "debian":
-        update_cmd  = "apt-get update -y"
-        install_cmd = "apt-get install -y"
-    elif distro == "fedora":
-        update_cmd  = "dnf makecache -y"
-        install_cmd = "dnf install -y"
-    elif distro == "suse":
-        update_cmd  = "zypper refresh"
-        install_cmd = "zypper install -y"
-    else:
-        raise RuntimeError("Unsupported/unknown distro")
+    """Install packages on Arch Linux.
 
-    run(update_cmd, sudo=True, logger=logger)
-    if pkgs:
-        run(f"{install_cmd} {' '.join(pkgs)}", sudo=True, logger=logger)
+    - Sync pacman database.
+    - Install official repo packages via pacman.
+    - If AUR packages are present and yay/paru exists, install them via that helper.
+      Otherwise log a warning.
+    """
+    if not pkgs:
+        return []
+
+    log = logger or print  # type: ignore
+
+    # Always refresh pacman databases first
+    run("pacman -Sy --noconfirm", sudo=True, logger=logger)
+
+    # Partition into official vs potential AUR by probing pacman -Si
+    official: list[str] = []
+    aur: list[str] = []
+    for p in pkgs:
+        try:
+            rc = subprocess.call(f"pacman -Si {shlex.quote(p)} >/dev/null 2>&1", shell=True)
+            if rc == 0:
+                official.append(p)
+            else:
+                aur.append(p)
+        except Exception:
+            aur.append(p)
+
+    if official:
+        run(f"pacman -S --needed --noconfirm {' '.join(shlex.quote(p) for p in official)}", sudo=True, logger=logger)
+
+    if aur:
+        helper = None
+        if which("yay"):
+            helper = "yay"
+        elif which("paru"):
+            helper = "paru"
+        if helper:
+            # AUR helpers handle privilege escalation internally; do not pass sudo
+            run(f"{helper} -S --needed --noconfirm {' '.join(shlex.quote(p) for p in aur)}", sudo=False, logger=logger)
+        else:
+            log(f"[warn] AUR helper not found (yay/paru). Unable to install: {' '.join(aur)}")
+
     return pkgs
 
 def package_plan(cfg):
-    distro = detect_distro()
-    common = cfg.get("packages",{}).get("common",[])
-    specific = cfg.get("packages",{}).get(distro,[])
-    # ensure dedupe while preserving order
-    seen, out = set(), []
-    for p in (common + specific):
-        if p not in seen:
-            seen.add(p); out.append(p)
-    return out
+    """Return list of packages to install.
+
+    Supports two formats in config.yaml:
+    - New (Arch-only):
+        packages:
+          - pkg1
+          - pkg2
+    - Legacy (multi-distro):
+        packages:
+          common: [foo]
+          arch: [bar]
+    """
+    section = cfg.get("packages", [])
+    if isinstance(section, list):
+        return list(section)
+    if isinstance(section, dict):
+        common = section.get("common", []) or []
+        arch_specific = section.get("arch", []) or []
+        seen, out = set(), []
+        for p in (list(common) + list(arch_specific)):
+            if p not in seen:
+                seen.add(p)
+                out.append(p)
+        return out
+    return []
 
 def ensure_stow(logger: Logger | None = None):
     if not which("stow"):
-        distro = detect_distro()
-        if distro == "arch":
+        try:
             run("pacman -Sy --noconfirm stow", sudo=True, logger=logger)
-        elif distro == "debian":
-            run("apt-get update -y", sudo=True, logger=logger)
-            run("apt-get install -y stow", sudo=True, logger=logger)
-        elif distro == "fedora":
-            run("dnf install -y stow", sudo=True, logger=logger)
-        elif distro == "suse":
-            run("zypper install -y stow", sudo=True, logger=logger)
-        else:
+        except RuntimeError:
             raise RuntimeError("Install stow manually first")
 
 def do_stow(cfg, target_home=True, dry=False, logger: Logger | None = None):
@@ -422,16 +437,8 @@ def ensure_python_yaml(logger: Logger | None = None):
     global yaml
     if yaml is not None:
         return
-    distro = detect_distro()
-    # best-effort system package first
-    if distro == "debian":
-        run("apt-get install -y python3-yaml || true", sudo=True, check=False, logger=logger)
-    elif distro == "fedora":
-        run("dnf install -y python3-pyyaml || true", sudo=True, check=False, logger=logger)
-    elif distro == "arch":
-        run("pacman -S --needed --noconfirm python-yaml python-pip || true", sudo=True, check=False, logger=logger)
-    elif distro == "suse":
-        run("zypper install -y python3-PyYAML || true", sudo=True, check=False, logger=logger)
+    # Arch: best-effort system package first
+    run("pacman -S --needed --noconfirm python-yaml python-pip || true", sudo=True, check=False, logger=logger)
     # fallback to pip
     # ensure pip exists (some minimal installs lack it)
     run("python3 -m ensurepip --upgrade || true", sudo=False, check=False, logger=logger)
