@@ -5,6 +5,7 @@ vim.cmd("set shiftwidth=2")
 vim.g.mapleader = " "
 
 vim.opt.swapfile = false
+vim.opt.termguicolors = true
 
 -- Navigate vim panes better
 vim.keymap.set('n', '<c-k>', ':wincmd k<CR>')
