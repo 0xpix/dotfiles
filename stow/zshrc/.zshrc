@@ -89,7 +89,7 @@ source ~/.local/share/omarchy/default/bash/aliases
 source ~/.local/share/omarchy/default/bash/functions
 
 # Alias for uv environment loader
-alias uvenv='uv venv .'
+alias uvenv='uv venv .venv --python /usr/bin/python'
 alias uvd='deactivate'
 alias uva='source .venv/bin/activate'
 
