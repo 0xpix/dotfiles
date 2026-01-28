@@ -1,6 +1,6 @@
 {
-   
-    "workbench.colorTheme": "Bearded Theme Monokai Terra",
+
+    "workbench.colorTheme": "Rosé Pine Dawn",
     "workbench.iconTheme": "vs-seti-hacknerdfontmono",
     "workbench.activityBar.location": "hidden",
     "workbench.sideBar.location": "right",
@@ -51,7 +51,7 @@
     "breadcrumbs.enabled": false,
     "scm.diffDecorations": "none",
     "editor.hover.delay": 1500,
-    "editor.hover.enabled": true,
+    "editor.hover.enabled": "on",
     "editor.matchBrackets": "never",
     "workbench.tips.enabled": false,
     "editor.colorDecorators": false,
@@ -187,8 +187,7 @@
       "plaintext": false,
       "markdown": false,
       "scminput": false
-  },
-    "github.copilot.advanced": {},
+},
     "remote.autoForwardPortsSource": "hybrid",
     "python.formatting.provider": "black",
     "php.suggest.basic": false,
@@ -252,5 +251,6 @@
   "editor.renderWhitespace": "none",
   "terminal.integrated.fontFamily": "monospace",
 "git.ignoreRebaseWarning": true,
-"window.menuBarVisibility": "compact"
+"python.defaultInterpreterPath": "/bin/python",
+"github.copilot.nextEditSuggestions.enabled": true
   }
