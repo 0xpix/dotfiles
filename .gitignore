@@ -34,3 +34,6 @@ stow/Code/.config/Code/Network Persistent State
 stow/Code/.config/Code/Preferences
 stow/Code/.config/Code/SharedStorage*
 stow/Code/.config/Code/Trust Tokens*
+
+__pycache__/
+*.pyc
