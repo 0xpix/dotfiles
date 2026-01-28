@@ -1,0 +1,36 @@
+# VS Code Cache and History
+stow/Code/.config/Code/Cache/
+stow/Code/.config/Code/CachedData/
+stow/Code/.config/Code/CachedExtensionVSIXs/
+stow/Code/.config/Code/CachedProfilesData/
+stow/Code/.config/Code/Code Cache/
+stow/Code/.config/Code/Crashpad/
+stow/Code/.config/Code/DawnGraphiteCache/
+stow/Code/.config/Code/DawnWebGPUCache/
+stow/Code/.config/Code/Dictionaries/
+stow/Code/.config/Code/GPUCache/
+stow/Code/.config/Code/Local Storage/
+stow/Code/.config/Code/logs/
+stow/Code/.config/Code/Service Worker/
+stow/Code/.config/Code/Session Storage/
+stow/Code/.config/Code/Shared Dictionary/
+stow/Code/.config/Code/VideoDecodeStats/
+stow/Code/.config/Code/WebStorage/
+stow/Code/.config/Code/blob_storage/
+
+# VS Code User State
+stow/Code/.config/Code/User/History/
+stow/Code/.config/Code/User/globalStorage/
+stow/Code/.config/Code/User/workspaceStorage/
+
+# VS Code Temp Files
+stow/Code/.config/Code/.org.chromium.*
+stow/Code/.config/Code/*.lock
+stow/Code/.config/Code/Cookies*
+stow/Code/.config/Code/DIPS*
+stow/Code/.config/Code/machineid
+stow/Code/.config/Code/TransportSecurity
+stow/Code/.config/Code/Network Persistent State
+stow/Code/.config/Code/Preferences
+stow/Code/.config/Code/SharedStorage*
+stow/Code/.config/Code/Trust Tokens*
