@@ -3,7 +3,6 @@
     "workbench.colorTheme": "Rosé Pine Dawn",
     "workbench.iconTheme": "vs-seti-hacknerdfontmono",
     "workbench.activityBar.location": "hidden",
-    "workbench.sideBar.location": "right",
     "workbench.statusBar.visible": false,
     "workbench.startupEditor": "none",
     "workbench.tree.indent": 18,
@@ -252,5 +251,8 @@
   "terminal.integrated.fontFamily": "monospace",
 "git.ignoreRebaseWarning": true,
 "python.defaultInterpreterPath": "/bin/python",
-"github.copilot.nextEditSuggestions.enabled": true
+"github.copilot.nextEditSuggestions.enabled": true,
+"chat.mcp.gallery.enabled": true,
+"extensions.ignoreRecommendations": true,
+"workbench.sideBar.location": "right"
   }
