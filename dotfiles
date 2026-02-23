@@ -1,0 +1,8 @@
+#!/usr/bin/env python3
+import sys, os
+
+# Ensure the repo root is on the path
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
+from tui.__main__ import _entry
+_entry()
