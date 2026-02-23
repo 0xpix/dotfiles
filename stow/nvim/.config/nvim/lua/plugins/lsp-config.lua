@@ -50,7 +50,7 @@ return {
       vim.keymap.set("n", "gT", vim.lsp.buf.type_definition, { desc = "Go to type definition" })
       vim.keymap.set("n", "<leader>ca", vim.lsp.buf.code_action, { desc = "Code action" })
       vim.keymap.set("n", "<leader>rn", vim.lsp.buf.rename, { desc = "Rename symbol" })
-      vim.keymap.set("n", "<leader>d", vim.diagnostic.open_float, { desc = "Show diagnostic" })
+      vim.keymap.set("n", "<leader>dd", vim.diagnostic.open_float, { desc = "Show diagnostic" })
       vim.keymap.set("n", "[d", vim.diagnostic.goto_prev, { desc = "Prev diagnostic" })
       vim.keymap.set("n", "]d", vim.diagnostic.goto_next, { desc = "Next diagnostic" })
     end,
