@@ -1,8 +1,7 @@
 
-# Polished TUI for dotfiles management - stow, packages, and plugins
-# Enhanced with colors, search, better layout, and robust error handling
+# Minimal TUI for dotfiles management
 
-import curses, os, subprocess, pathlib, textwrap, shlex, threading, time, queue, shutil
+import curses, os, subprocess, pathlib, shlex, threading, time, queue, shutil
 from .ops import load_config, ensure_packages, clone_repos, package_plan
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
@@ -11,38 +10,40 @@ STOW_DIR = ROOT / "stow"
 # UI event queue (all curses drawing must happen on main thread)
 ui_events = queue.Queue()
 
-# Icons and messages
-ICONS = {"info": "i", "success": "✓", "warn": "⚠", "error": "✗"}
-HELP_TEXT = "SPACE select  ENTER run  TAB switch pane  A/U/I all/none/invert  / filter  ? help  r refresh  D cleanup  q quit"
+# Icons
+ICONS = {"info": "·", "success": "✓", "warn": "!", "error": "✗"}
+HINT_MENU = "↑/↓ navigate  ⏎ select  ? help  q quit"
+HINT_PAGE = "␣ toggle  ⏎ run  a/u all/none  / filter  ? help  b back"
 
 # Color pairs (will be initialized if colors available)
 COLORS = {}
 
 def init_colors():
-    """Initialize color pairs if terminal supports colors"""
+    """Initialize muted color pairs for a minimal look"""
     global COLORS
     if not curses.has_colors():
         return
 
     curses.start_color()
     try:
-        # Define color pairs
-        curses.init_pair(1, curses.COLOR_WHITE, curses.COLOR_BLUE)    # title
-        curses.init_pair(2, curses.COLOR_BLACK, curses.COLOR_WHITE)   # selected
-        curses.init_pair(3, curses.COLOR_GREEN, -1)                  # success
+        curses.init_pair(1, curses.COLOR_WHITE, -1)                  # title
+        curses.init_pair(2, curses.COLOR_BLACK, curses.COLOR_WHITE)   # cursor
+        curses.init_pair(3, curses.COLOR_GREEN, -1)                  # success/selected
         curses.init_pair(4, curses.COLOR_YELLOW, -1)                 # warning
         curses.init_pair(5, curses.COLOR_RED, -1)                    # error
-        curses.init_pair(6, curses.COLOR_CYAN, -1)                   # info
-        curses.init_pair(7, curses.COLOR_WHITE, curses.COLOR_BLACK)   # status bar
+        curses.init_pair(6, curses.COLOR_CYAN, -1)                   # info/accent
+        curses.init_pair(7, curses.COLOR_WHITE, -1)                  # status bar
 
         COLORS = {
             'title': curses.color_pair(1) | curses.A_BOLD,
-            'selected': curses.color_pair(2) | curses.A_BOLD,
+            'cursor': curses.color_pair(2) | curses.A_BOLD,
+            'accent': curses.color_pair(6) | curses.A_BOLD,
             'success': curses.color_pair(3),
             'warn': curses.color_pair(4),
             'error': curses.color_pair(5),
             'info': curses.color_pair(6),
-            'status': curses.color_pair(7)
+            'dim': curses.A_DIM,
+            'status': curses.color_pair(7) | curses.A_DIM
         }
     except curses.error:
         pass
@@ -577,7 +578,7 @@ class LogBuf:
         self.dirty = True
 
 def clear_rect(win, y, x, h, w):
-    """Clear a rectangle to prevent ghosting"""
+    """Clear a rectangle"""
     for row in range(h):
         if y + row >= 0:
             try:
@@ -586,59 +587,59 @@ def clear_rect(win, y, x, h, w):
             except curses.error:
                 pass
 
+def draw_line(win, y, x, w, label=None):
+    """Draw a thin horizontal divider with optional label"""
+    if w < 2:
+        return
+    try:
+        line = '─' * w
+        if label:
+            tag = f" {label} "
+            if len(tag) < w - 4:
+                line = '──' + tag + '─' * (w - 2 - len(tag))
+        win.addstr(y, x, line[:w], curses.A_DIM)
+    except curses.error:
+        pass
+
+# Keep draw_box as alias for compatibility with confirm_remove_dialog
 def draw_box(win, y, x, h, w, title=None):
-    """Draw a simple box with optional title"""
+    """Simple box for dialogs only"""
     if h < 2 or w < 2:
         return
-
     try:
-        # Top border
         win.addch(y, x, ord('┌'))
         win.hline(y, x + 1, ord('─'), w - 2)
         win.addch(y, x + w - 1, ord('┐'))
-
-        # Side borders
         for i in range(1, h - 1):
             win.addch(y + i, x, ord('│'))
             win.addch(y + i, x + w - 1, ord('│'))
-
-        # Bottom border
         win.addch(y + h - 1, x, ord('└'))
         win.hline(y + h - 1, x + 1, ord('─'), w - 2)
         win.addch(y + h - 1, x + w - 1, ord('┘'))
-
-        # Title
         if title and len(title) < w - 4:
             win.addstr(y, x + 2, f" {title} ")
     except curses.error:
         pass
 
 def toast(stdscr, title, lines, is_error=False):
-    """Show centered overlay toast"""
+    """Show a minimal centered overlay"""
     H, W = stdscr.getmaxyx()
-    max_width = min(W - 4, 60)
-    box_h = min(len(lines) + 4, H - 4)
-    box_w = min(max(len(title) + 4, max_width), W - 2)
+    max_w = min(W - 6, 50)
+    content_lines = lines[:6]
+    box_h = len(content_lines) + 4
+    box_w = max(len(title) + 6, max_w)
+    box_w = min(box_w, W - 2)
 
-    start_y = (H - box_h) // 2
-    start_x = (W - box_w) // 2
+    sy = (H - box_h) // 2
+    sx = (W - box_w) // 2
 
-    # Clear area
-    clear_rect(stdscr, start_y, start_x, box_h, box_w)
-
-    # Draw box
-    color = COLORS.get('error' if is_error else 'success', curses.A_BOLD)
-    draw_box(stdscr, start_y, start_x, box_h, box_w, title)
-
-    # Content
     try:
-        for i, line in enumerate(lines[:box_h - 4]):
-            text = line[:box_w - 4]
-            stdscr.addstr(start_y + 2 + i, start_x + 2, text, color)
-
-        # "Press any key" hint
-        hint = "Press any key to continue"
-        stdscr.addstr(start_y + box_h - 2, start_x + 2, hint, curses.A_DIM)
+        for y in range(box_h):
+            stdscr.addstr(sy + y, sx, ' ' * box_w, curses.A_REVERSE)
+        stdscr.addstr(sy + 1, sx + 2, title[:box_w - 4], curses.A_REVERSE | curses.A_BOLD)
+        for i, line in enumerate(content_lines):
+            stdscr.addstr(sy + 2 + i, sx + 2, line[:box_w - 4], curses.A_REVERSE)
+        stdscr.addstr(sy + box_h - 1, sx + 2, "press any key", curses.A_REVERSE | curses.A_DIM)
     except curses.error:
         pass
 
@@ -783,10 +784,12 @@ def main(stdscr):
     plugin_repos = [r for r in cfg.get("repos", []) if "/.oh-my-zsh/custom/plugins/" in r.get("dest", "")]
     plugins = [r["dest"].split("/.oh-my-zsh/custom/plugins/")[-1] for r in plugin_repos]
 
-    # UI state - panes: stow, themes, packages, plugins
+    # UI state
     panes = ["Stow Packages", "Themes", "System Packages", "Plugins"]
     current_pane = 0
     idx = 0
+    view = "menu"   # "menu" = home screen, "page" = category detail
+    menu_idx = 0
 
     # Selection state for each pane
     selected_stow = set(stow_pkgs)
@@ -809,13 +812,10 @@ def main(stdscr):
     show_help = False
     action_thread = None
     last_draw = 0.0
-    spinner_symbols = ['|', '/', '-', '\\']
     last_spinner_frame = -1
     last_log_redraw_time = 0.0
-    LOG_REDRAW_INTERVAL = 0.15  # seconds (throttle high-frequency log streaming)
-    suppress_enter_once = False  # prevent immediate re-trigger after toast dismiss
-
-    KEY_TAB = getattr(curses, 'KEY_TAB', 9)
+    LOG_REDRAW_INTERVAL = 0.15
+    suppress_enter_once = False
 
     def logger(level, msg):
         # Headless logger: only mutates buffer; draw happens in main loop tick
@@ -853,16 +853,14 @@ def main(stdscr):
         idx = min(idx, max(0, len(current_filtered) - 1))
 
     def draw(partial: bool = False):
-        """Draw UI. If partial=True, redraw only log pane + status/spinner (no full clear)."""
+        """Draw minimal UI — either menu or page view."""
         nonlocal show_help, last_draw, last_spinner_frame
         H, W = stdscr.getmaxyx()
 
-        # Handle tiny terminals
-        if H < 12 or W < 60:
+        if H < 10 or W < 30:
             stdscr.clear()
             try:
-                stdscr.addstr(H//2, max(0, (W-20)//2), "Terminal too small", curses.A_BOLD)
-                stdscr.addstr(H//2+1, max(0, (W-30)//2), "Need at least 60x12", curses.A_DIM)
+                stdscr.addstr(H // 2, max(0, (W - 10) // 2), "Too small", curses.A_DIM)
             except curses.error:
                 pass
             stdscr.refresh()
@@ -871,169 +869,181 @@ def main(stdscr):
         if not partial:
             stdscr.clear()
 
-        # Title bar
-        title = "Dotfiles Management TUI — Enhanced"
-        title_attr = COLORS.get('title', curses.A_BOLD)
-        try:
-            stdscr.addstr(0, 2, title.ljust(W-2), title_attr)
-        except curses.error:
-            pass
-
-        # Help bar
-        help_line = HELP_TEXT
-        if current_pane == 0:
-            help_line = f"{HELP_TEXT}  |  DRY=DOTFILES_REMOVE_DRY=1  FORCE=DOTFILES_REMOVE_FORCE=1"
-        elif current_pane == 1:
-            help_line = f"{HELP_TEXT}  |  THEME DRY=DOTFILES_THEMES_DRY=1  FORCE=DOTFILES_THEMES_FORCE=1"
-        help_text = textwrap.shorten(help_line, W-4, placeholder='...')
-        try:
-            stdscr.addstr(1, 2, help_text)
-        except curses.error:
-            pass
-
-        # Pane tabs (skip on partial to reduce churn)
-        tab_y = 3
-        if not partial:
-            x = 2
-            for i, pane in enumerate(panes):
-                is_active = i == current_pane
-                attr = COLORS.get('selected' if is_active else 'info', curses.A_REVERSE if is_active else curses.A_BOLD)
-                try:
-                    stdscr.addstr(tab_y, x, f" {pane} ", attr)
-                except curses.error:
-                    pass
-                x += len(pane) + 3
-
-        # Get current pane data
-        all_items, selected_items, filtered_items = get_current_data()
-
-        # Calculate layout
-        list_start_y = 5
-        status_y = H - 1
-        log_start_y = min(list_start_y + max(10, len(filtered_items) + 3), H - 8)
-        list_h = log_start_y - list_start_y - 1
-        log_h = status_y - log_start_y - 1
-
-        # Package list pane
-        pane_w = W - 4
-        pane_title = f"{panes[current_pane]} - {len(selected_items)}/{len(all_items)} selected"
-        if filter_text:
-            pane_title += f" | filter: '{filter_text}'"
-
-        if not partial:
-            draw_box(stdscr, list_start_y, 1, list_h, pane_w, pane_title)
-
-        # Package items
-        if not partial:
-            if not filtered_items:
-                try:
-                    msg = "No items found" if not all_items else f"No matches for '{filter_text}'"
-                    stdscr.addstr(list_start_y + 2, 3, msg, curses.A_DIM)
-                except curses.error:
-                    pass
-            else:
-                view_h = list_h - 3
-                start_idx = max(0, idx - view_h + 1) if idx >= view_h else 0
-                for i, item in enumerate(filtered_items[start_idx:start_idx + view_h]):
-                    real_idx = start_idx + i
-                    is_selected = item in selected_items
-                    is_current = real_idx == idx
-                    checkbox = "[✓]" if is_selected else "[ ]"
-                    text = f"{checkbox} {item}"
-                    if is_current:
-                        attr = COLORS.get('selected', curses.A_REVERSE | curses.A_BOLD)
-                    elif is_selected:
-                        attr = COLORS.get('success', curses.A_BOLD)
-                    else:
-                        attr = curses.A_NORMAL
-                    try:
-                        stdscr.addstr(list_start_y + 2 + i, 3, text[:pane_w-6].ljust(pane_w-6), attr)
-                    except curses.error:
-                        pass
-        # Log pane box (always redraw for partial to keep log current)
-        draw_box(stdscr, log_start_y, 1, log_h, pane_w,
-                 f"Log ({len(log.lines)} lines)" + (" | following" if log.follow else f" | scroll +{log.scroll}"))
-
-        if log.lines:
-            view_start = max(0, len(log.lines) - log_h + 3 - log.scroll)
-            view_end = view_start + log_h - 3
-            for i, line in enumerate(log.lines[view_start:view_end]):
-                color = curses.A_NORMAL
-                if line.startswith(ICONS["success"]):
-                    color = COLORS.get('success', curses.A_NORMAL)
-                elif line.startswith(ICONS["error"]):
-                    color = COLORS.get('error', curses.A_NORMAL)
-                elif line.startswith(ICONS["warn"]):
-                    color = COLORS.get('warn', curses.A_NORMAL)
-                elif line.startswith(ICONS["info"]):
-                    color = COLORS.get('info', curses.A_NORMAL)
-                padded = line[:pane_w-6].ljust(pane_w-6)
-                try:
-                    stdscr.addstr(log_start_y + 2 + i, 3, padded, color)
-                except curses.error:
-                    pass
-            painted = len(log.lines[view_start:view_end])
-            remaining_lines = (log_h - 3) - painted
-            for extra in range(remaining_lines):
-                try:
-                    stdscr.addstr(log_start_y + 2 + painted + extra, 3, ' ' * (pane_w-6))
-                except curses.error:
-                    pass
-
-        # Status bar
-        status_parts = []
-        if is_running:
-            frame = int(time.time() * 5) % len(spinner_symbols)
-            last_spinner_frame = frame
-            spin = spinner_symbols[frame]
-            label = running_label or "RUNNING"
-            status_parts.append(f"{spin} {label}")
+        if view == "menu":
+            _draw_menu(stdscr, H, W)
         else:
-            status_parts.append("● READY")
-        if filter_text:
-            status_parts.append(f"filter:'{filter_text}'")
-        status = " | ".join(status_parts)
-        status_attr = COLORS.get('status', curses.A_REVERSE)
-        try:
-            stdscr.addstr(status_y, 0, status.ljust(W), status_attr)
-        except curses.error:
-            pass
+            _draw_page(stdscr, H, W, partial)
 
-        # Help overlay
+        # ── Help overlay ──
         if show_help:
-            help_lines = [
-                "Navigation:",
-                "  ↑/↓, k/j    Move cursor",
-                "  Home/End    First/last item",
-                "  PgUp/PgDn   Scroll list",
-                "",
-                "Selection:",
-                "  Space       Toggle item",
-                "  A/a         Select all",
-                "  U/u         Unselect all",
-                "  I/i         Invert selection",
-                "",
-                "Actions:",
-                "  Enter       Stow selected / Copy selected themes",
-                "  D           Selective Cleanup (remove only paths present in stow)",
-                "  r           Refresh packages",
-                "  c           Clear log",
-                "",
-                "Other:",
-                "  /           Filter packages",
-                "  F           Toggle log follow",
-                "  G           Jump to log bottom",
-                "  q, Esc      Quit",
-                "",
-                "Env hints:",
-                "  DRY:   DOTFILES_REMOVE_DRY=1",
-                "  FORCE: DOTFILES_REMOVE_FORCE=1",
-            ]
-            toast(stdscr, "Help", help_lines)
+            if view == "menu":
+                help_lines = [
+                    "↑/↓ k/j  navigate",
+                    "⏎        open page",
+                    "q        quit",
+                ]
+            else:
+                help_lines = [
+                    "↑/↓ k/j  navigate       ␣  toggle select",
+                    "a  all    u  none        i  invert",
+                    "⏎  run    /  filter      r  refresh",
+                    "D  cleanup (stow page)   c  clear log",
+                    "b  back to menu",
+                ]
+            toast(stdscr, "Keys", help_lines)
 
         stdscr.refresh()
         last_draw = time.time()
         log.dirty = False
+
+    def _draw_menu(stdscr, H, W):
+        """Draw centered home screen with button list."""
+        # Title centered near top third
+        title = "dotfiles"
+        title_attr = COLORS.get('title', curses.A_BOLD)
+        title_y = max(1, H // 4 - 2)
+        try:
+            stdscr.addstr(title_y, (W - len(title)) // 2, title, title_attr)
+        except curses.error:
+            pass
+
+        # Buttons
+        btn_width = max(len(p) for p in panes) + 6  # padding inside button
+        start_y = title_y + 3
+        for i, pane in enumerate(panes):
+            is_cur = i == menu_idx
+            label = pane.center(btn_width)
+            x = (W - btn_width) // 2
+
+            if is_cur:
+                # Highlighted button: reverse video
+                attr = COLORS.get('cursor', curses.A_REVERSE)
+                prefix = "▸ "
+            else:
+                attr = curses.A_DIM
+                prefix = "  "
+
+            full = f"{prefix}{label}"
+            try:
+                stdscr.addstr(start_y + i * 2, max(0, x - 2), full[:W - 2], attr)
+            except curses.error:
+                pass
+
+        # Hint bar at bottom
+        status_y = H - 1
+        try:
+            stdscr.addstr(status_y, 0, f"  {HINT_MENU}"[:W].ljust(W), COLORS.get('status', curses.A_DIM))
+        except curses.error:
+            pass
+
+    def _draw_page(stdscr, H, W, partial):
+        """Draw category detail page."""
+        nonlocal last_spinner_frame
+        PAD = 2
+        status_y = H - 1
+
+        # ── Row 0: Back + page title + count ──
+        all_items, selected_items, filtered_items = get_current_data()
+        page_title = f"← {panes[current_pane]}"
+        count_str = f"{len(selected_items)}/{len(all_items)}"
+        title_attr = COLORS.get('accent', curses.A_BOLD)
+        try:
+            stdscr.addstr(0, PAD, page_title, title_attr)
+            stdscr.addstr(0, W - len(count_str) - PAD, count_str, curses.A_DIM)
+        except curses.error:
+            pass
+
+        # ── Row 1: Divider ──
+        if not partial:
+            draw_line(stdscr, 1, PAD, W - PAD * 2)
+
+        # ── Row 2+: Filter indicator ──
+        list_start_y = 2
+        if filter_text and not partial:
+            try:
+                stdscr.addstr(list_start_y, PAD, f"/ {filter_text}", COLORS.get('info', curses.A_DIM))
+            except curses.error:
+                pass
+            list_start_y += 1
+
+        # ── List area ──
+        log_lines_count = min(4, max(1, len(log.lines)))
+        log_area = log_lines_count + 2
+        list_end_y = status_y - log_area
+        list_h = list_end_y - list_start_y
+
+        if not partial and list_h > 0:
+            if not filtered_items:
+                msg = "nothing here" if not all_items else f"no matches for '{filter_text}'"
+                try:
+                    stdscr.addstr(list_start_y + 1, PAD + 2, msg, curses.A_DIM)
+                except curses.error:
+                    pass
+            else:
+                view_h = list_h
+                start_idx = max(0, idx - view_h + 1) if idx >= view_h else 0
+                for i, item in enumerate(filtered_items[start_idx:start_idx + view_h]):
+                    real_idx = start_idx + i
+                    is_sel = item in selected_items
+                    is_cur = real_idx == idx
+
+                    cursor = "▸ " if is_cur else "  "
+                    check = "✓ " if is_sel else "· "
+                    text = f"{cursor}{check}{item}"
+
+                    if is_cur:
+                        attr = COLORS.get('cursor', curses.A_REVERSE)
+                    elif is_sel:
+                        attr = COLORS.get('success', curses.A_BOLD)
+                    else:
+                        attr = curses.A_DIM
+                    try:
+                        stdscr.addstr(list_start_y + i, PAD, text[:W - PAD * 2].ljust(W - PAD * 2), attr)
+                    except curses.error:
+                        pass
+
+        # ── Log area ──
+        log_divider_y = list_end_y
+        usable_w = W - PAD * 2
+
+        if log.lines:
+            draw_line(stdscr, log_divider_y, PAD, usable_w)
+            log_view_h = min(log_lines_count, status_y - log_divider_y - 1)
+            view_start = max(0, len(log.lines) - log_view_h - log.scroll)
+            view_end = view_start + log_view_h
+            for i, line in enumerate(log.lines[view_start:view_end]):
+                color = curses.A_DIM
+                if line.startswith(ICONS["success"]):
+                    color = COLORS.get('success', curses.A_DIM)
+                elif line.startswith(ICONS["error"]):
+                    color = COLORS.get('error', curses.A_DIM)
+                elif line.startswith(ICONS["warn"]):
+                    color = COLORS.get('warn', curses.A_DIM)
+                padded = line[:usable_w].ljust(usable_w)
+                try:
+                    stdscr.addstr(log_divider_y + 1 + i, PAD, padded, color)
+                except curses.error:
+                    pass
+            painted = len(log.lines[view_start:view_end])
+            for extra in range(log_view_h - painted):
+                try:
+                    stdscr.addstr(log_divider_y + 1 + painted + extra, PAD, ' ' * usable_w)
+                except curses.error:
+                    pass
+
+        # ── Status bar ──
+        if is_running:
+            frame = int(time.time() * 4) % 4
+            last_spinner_frame = frame
+            dots = "·" * (frame + 1)
+            label = running_label or "working"
+            status = f"  {dots} {label}"
+        else:
+            status = f"  {HINT_PAGE}"
+        try:
+            stdscr.addstr(status_y, 0, status[:W].ljust(W), COLORS.get('status', curses.A_DIM))
+        except curses.error:
+            pass
 
     def run_async(name, func, on_success=None):
         """Run function asynchronously; worker is headless (no curses)."""
@@ -1154,7 +1164,6 @@ def main(stdscr):
                     kind, is_error, title, lines = ui_events.get_nowait()
                     if kind == "toast":
                         toast(stdscr, title, lines, is_error=is_error)
-                        # Wait for keypress (still on main thread). With timeout(100) this is short-blocking.
                         stdscr.getch()
                         log.clear()
                         log.dirty = True
@@ -1166,215 +1175,216 @@ def main(stdscr):
         except KeyboardInterrupt:
             break
 
-        # If help overlay active, keep it until a key is pressed; any key dismisses
+        # Help overlay: any key dismisses
         if show_help:
-            if c != -1:  # any key closes help
+            if c != -1:
                 show_help = False
                 draw()
-            else:
-                # keep overlay (spinner/log partial draws will still repaint it)
-                pass
             if show_help:
-                # Skip normal key handling while help shown
                 continue
 
-                # Navigation
-        if c in (ord('q'), 27):  # Quit
-            break
-        elif c in (KEY_TAB, 9, ord('\t')):  # Switch pane
-            current_pane = (current_pane + 1) % len(panes)
-            idx = 0
-            apply_filter()  # Refresh filtered list for new pane
-        elif c in (curses.KEY_UP, ord('k')):
-            idx = max(0, idx - 1)
-        elif c in (curses.KEY_DOWN, ord('j')):
-            _, _, current_filtered = get_current_data()
-            idx = min(max(0, len(current_filtered) - 1), idx + 1)
-        elif c == curses.KEY_HOME:
-            idx = 0
-        elif c == curses.KEY_END:
-            _, _, current_filtered = get_current_data()
-            idx = max(0, len(current_filtered) - 1)
-        elif c == curses.KEY_PPAGE:  # Page up - scroll list or log
-            _, _, current_filtered = get_current_data()
-            if len(current_filtered) > 10:
-                idx = max(0, idx - 10)
-            else:
-                log.scroll = min(len(log.lines), log.scroll + 10)
-                log.follow = False
-        elif c == curses.KEY_NPAGE:  # Page down - scroll list or log
-            _, _, current_filtered = get_current_data()
-            if len(current_filtered) > 10:
-                idx = min(max(0, len(current_filtered) - 1), idx + 10)
-            else:
-                log.scroll = max(0, log.scroll - 10)
-                if log.scroll == 0:
-                    log.follow = True
-
-        # Selection
-        elif c == ord(' '):  # Toggle selection
-            _, current_selected, current_filtered = get_current_data()
-            if current_filtered and idx < len(current_filtered):
-                item = current_filtered[idx]
-                if item in current_selected:
-                    current_selected.remove(item)
-                else:
-                    current_selected.add(item)
-        elif c in (ord('A'), ord('a')):  # Select all
-            _, current_selected, current_filtered = get_current_data()
-            current_selected.update(current_filtered)
-        elif c in (ord('U'), ord('u')):  # Unselect all
-            _, current_selected, current_filtered = get_current_data()
-            for item in current_filtered:
-                current_selected.discard(item)
-        elif c in (ord('I'), ord('i')):  # Invert selection
-            _, current_selected, current_filtered = get_current_data()
-            for item in current_filtered:
-                if item in current_selected:
-                    current_selected.remove(item)
-                else:
-                    current_selected.add(item)
-
-        # Actions
-        elif c in (10, 13):  # Enter - run action for current pane
-            if suppress_enter_once:
-                suppress_enter_once = False  # swallow this enter (toast dismissal)
-            elif not is_running:
-                if current_pane == 0:  # Stow packages
-                    run_async("Stow packages", stow_selected)
-                elif current_pane == 1:  # Themes copy
-                    if not selected_themes:
-                        ui_events.put(("toast", False, f"{ICONS['warn']} No themes selected", ["Select one or more themes"]))
-                    else:
-                        def do_copy():
-                            names = sorted(selected_themes)
-                            return copy_themes_worker(names, logger)
-
-                        def after_copy(summary):
-                            dry = summary.get("dry")
-                            ok = summary.get("ok", 0)
-                            errors = summary.get("errors", 0)
-                            skipped = summary.get("skipped", 0)
-                            title = f"{ICONS['success']} Copied {ok} theme(s)" if errors == 0 else f"{ICONS['warn']} Copy completed with issues"
-                            suffix = " — dry run" if dry else ""
-                            ui_events.put(("toast", errors > 0, title, [f"ok {ok}, skipped {skipped}, errors {errors}{suffix}"]))
-
-                        run_async("Copying themes…", do_copy, on_success=after_copy)
-                elif current_pane == 2:  # System packages
-                    if ensure_sudo_cached_on_main(stdscr, logger):
-                        run_async("Install packages", install_packages_no_prompt)
-                elif current_pane == 3:  # Plugins
-                    run_async("Clone plugins", clone_plugins)
-        elif c == ord('r'):  # Refresh
-            # Reload all data
-            cfg = load_config()
-            stow_pkgs = list_packages()
-            themes_map = discover_themes()
-            theme_names = sorted(themes_map.keys())
-            sys_pkgs = package_plan(cfg)
-            plugin_repos = [r for r in cfg.get("repos", []) if "/.oh-my-zsh/custom/plugins/" in r.get("dest", "")]
-            plugins = [r["dest"].split("/.oh-my-zsh/custom/plugins/")[-1] for r in plugin_repos]
-
-            # Preserve valid selections
-            selected_stow &= set(stow_pkgs)
-            selected_themes &= set(theme_names)
-            selected_pkgs &= set(sys_pkgs)
-            selected_plugins &= set(plugins)
-
-            apply_filter()
-            logger("info", "Data refreshed from configuration and theme sources")
-        elif c == ord('c'):  # Clear log
-            log.clear()
-
-        # Filter and help
-        elif c == ord('/'):  # Filter
-            curses.curs_set(1)
-            try:
-                H, W = stdscr.getmaxyx()
-                prompt = f"Filter {panes[current_pane]}: "
-                stdscr.addstr(H-1, 0, prompt.ljust(W), curses.A_REVERSE)
-                stdscr.addstr(H-1, len(prompt), "")
-                stdscr.refresh()
-
-                filter_input = filter_text  # Start with current filter
-                while True:
-                    fc = stdscr.getch()
-                    if fc in (10, 13):  # Enter
-                        break
-                    elif fc == 27:  # Escape - clear filter
-                        filter_input = ""
-                        break
-                    elif fc in (curses.KEY_BACKSPACE, 127, 8):
-                        if filter_input:
-                            filter_input = filter_input[:-1]
-                    elif 32 <= fc <= 126:  # Printable chars
-                        filter_input += chr(fc)
-
-                    # Live update
-                    display = f"{prompt}{filter_input}".ljust(W)
-                    stdscr.addstr(H-1, 0, display, curses.A_REVERSE)
-                    stdscr.refresh()
-
-                filter_text = filter_input
+        # ────── Menu view ──────
+        if view == "menu":
+            if c in (ord('q'),):
+                break
+            elif c in (curses.KEY_UP, ord('k')):
+                menu_idx = max(0, menu_idx - 1)
+            elif c in (curses.KEY_DOWN, ord('j')):
+                menu_idx = min(len(panes) - 1, menu_idx + 1)
+            elif c in (10, 13):  # Enter → open page
+                current_pane = menu_idx
+                idx = 0
+                filter_text = ""
                 apply_filter()
+                view = "page"
+            elif c == ord('?'):
+                show_help = True
 
-            finally:
-                curses.curs_set(0)
+        # ────── Page view ──────
+        elif view == "page":
+            # Back to menu
+            if c == ord('b'):
+                view = "menu"
+                filter_text = ""
 
-        elif c == ord('?'):  # Help
-            show_help = True
-        elif c in (ord('F'), ord('f')):  # Toggle log follow
-            log.follow = not log.follow
-            if log.follow:
-                log.scroll = 0
-        elif c in (ord('G'), ord('g')):  # Jump to log bottom
-            log.follow = True
-            log.scroll = 0
-
-        # Selective Cleanup (Shift+D) only in Stow pane
-        elif c == ord('D') and current_pane == 0 and not is_running:
-            if not selected_stow:
-                ui_events.put(("toast", False, f"{ICONS['warn']} No stow packages selected", ["Select one or more packages in Stow pane"]))
-            else:
-                selected_list = sorted(selected_stow)
-                if not STOW_DIR.exists():
-                    ui_events.put(("toast", True, f"{ICONS['error']} Missing stow directory", [str(STOW_DIR)]))
+            # Navigation
+            elif c in (curses.KEY_UP, ord('k')):
+                idx = max(0, idx - 1)
+            elif c in (curses.KEY_DOWN, ord('j')):
+                _, _, current_filtered = get_current_data()
+                idx = min(max(0, len(current_filtered) - 1), idx + 1)
+            elif c == curses.KEY_HOME:
+                idx = 0
+            elif c == curses.KEY_END:
+                _, _, current_filtered = get_current_data()
+                idx = max(0, len(current_filtered) - 1)
+            elif c == curses.KEY_PPAGE:
+                _, _, current_filtered = get_current_data()
+                if len(current_filtered) > 10:
+                    idx = max(0, idx - 10)
                 else:
-                    files, dirs = enumerate_stow_targets_for_pkgs(selected_list)
-                    targets_preview = files + dirs
-                    if not targets_preview:
-                        ui_events.put(("toast", False, f"{ICONS['warn']} Nothing to remove", ["No targets derived from selected stow packages"]))
+                    log.scroll = min(len(log.lines), log.scroll + 10)
+                    log.follow = False
+            elif c == curses.KEY_NPAGE:
+                _, _, current_filtered = get_current_data()
+                if len(current_filtered) > 10:
+                    idx = min(max(0, len(current_filtered) - 1), idx + 10)
+                else:
+                    log.scroll = max(0, log.scroll - 10)
+                    if log.scroll == 0:
+                        log.follow = True
+
+            # Selection
+            elif c == ord(' '):
+                _, current_selected, current_filtered = get_current_data()
+                if current_filtered and idx < len(current_filtered):
+                    item = current_filtered[idx]
+                    if item in current_selected:
+                        current_selected.remove(item)
                     else:
-                        if confirm_remove_dialog(stdscr, targets_preview):
-                            def do_cleanup():
-                                return selective_cleanup_worker(files, dirs, logger)
+                        current_selected.add(item)
+            elif c in (ord('A'), ord('a')):
+                _, current_selected, current_filtered = get_current_data()
+                current_selected.update(current_filtered)
+            elif c in (ord('U'), ord('u')):
+                _, current_selected, current_filtered = get_current_data()
+                for item in current_filtered:
+                    current_selected.discard(item)
+            elif c in (ord('I'), ord('i')):
+                _, current_selected, current_filtered = get_current_data()
+                for item in current_filtered:
+                    if item in current_selected:
+                        current_selected.remove(item)
+                    else:
+                        current_selected.add(item)
 
-                            def after_cleanup(summary):
-                                dry = summary.get('dry_run')
-                                files_removed = summary.get('files_removed', 0)
-                                dirs_removed = summary.get('dirs_removed', 0)
-                                skipped = summary.get('skipped', 0)
-                                errors = summary.get('errors', 0)
-                                title = f"{ICONS['success']} Selective cleanup complete" if errors == 0 else f"{ICONS['warn']} Selective cleanup completed with issues"
-                                suffix = " [DRY RUN]" if dry else ""
-                                lines = [
-                                    f"removed files {files_removed}, removed dirs {dirs_removed}, skipped {skipped}, errors {errors}{suffix}",
-                                ]
-                                ui_events.put(("toast", errors > 0, title, lines))
-
-                            run_async("Cleaning…", do_cleanup, on_success=after_cleanup)
+            # Run action
+            elif c in (10, 13):
+                if suppress_enter_once:
+                    suppress_enter_once = False
+                elif not is_running:
+                    if current_pane == 0:
+                        run_async("Stow packages", stow_selected)
+                    elif current_pane == 1:
+                        if not selected_themes:
+                            ui_events.put(("toast", False, f"{ICONS['warn']} No themes selected", ["Select one or more themes"]))
                         else:
-                            logger("info", "Selective cleanup cancelled")
+                            def do_copy():
+                                names = sorted(selected_themes)
+                                return copy_themes_worker(names, logger)
+
+                            def after_copy(summary):
+                                dry = summary.get("dry")
+                                ok = summary.get("ok", 0)
+                                errors = summary.get("errors", 0)
+                                skipped = summary.get("skipped", 0)
+                                title = f"{ICONS['success']} Copied {ok} theme(s)" if errors == 0 else f"{ICONS['warn']} Copy completed with issues"
+                                suffix = " — dry run" if dry else ""
+                                ui_events.put(("toast", errors > 0, title, [f"ok {ok}, skipped {skipped}, errors {errors}{suffix}"]))
+
+                            run_async("Copying themes…", do_copy, on_success=after_copy)
+                    elif current_pane == 2:
+                        if ensure_sudo_cached_on_main(stdscr, logger):
+                            run_async("Install packages", install_packages_no_prompt)
+                    elif current_pane == 3:
+                        run_async("Clone plugins", clone_plugins)
+
+            elif c == ord('r'):
+                cfg = load_config()
+                stow_pkgs = list_packages()
+                themes_map = discover_themes()
+                theme_names = sorted(themes_map.keys())
+                sys_pkgs = package_plan(cfg)
+                plugin_repos = [r for r in cfg.get("repos", []) if "/.oh-my-zsh/custom/plugins/" in r.get("dest", "")]
+                plugins = [r["dest"].split("/.oh-my-zsh/custom/plugins/")[-1] for r in plugin_repos]
+                selected_stow &= set(stow_pkgs)
+                selected_themes &= set(theme_names)
+                selected_pkgs &= set(sys_pkgs)
+                selected_plugins &= set(plugins)
+                apply_filter()
+                logger("info", "Refreshed")
+            elif c == ord('c'):
+                log.clear()
+
+            # Filter
+            elif c == ord('/'):
+                curses.curs_set(1)
+                try:
+                    H, W = stdscr.getmaxyx()
+                    prompt = "/ "
+                    stdscr.addstr(H - 1, 0, prompt.ljust(W), curses.A_DIM)
+                    stdscr.refresh()
+                    filter_input = filter_text
+                    while True:
+                        fc = stdscr.getch()
+                        if fc in (10, 13):
+                            break
+                        elif fc == 27:
+                            filter_input = ""
+                            break
+                        elif fc in (curses.KEY_BACKSPACE, 127, 8):
+                            if filter_input:
+                                filter_input = filter_input[:-1]
+                        elif 32 <= fc <= 126:
+                            filter_input += chr(fc)
+                        display = f"{prompt}{filter_input}".ljust(W)
+                        stdscr.addstr(H - 1, 0, display, curses.A_DIM)
+                        stdscr.refresh()
+                    filter_text = filter_input
+                    apply_filter()
+                finally:
+                    curses.curs_set(0)
+
+            elif c == ord('?'):
+                show_help = True
+            elif c in (ord('F'), ord('f')):
+                log.follow = not log.follow
+                if log.follow:
+                    log.scroll = 0
+            elif c in (ord('G'), ord('g')):
+                log.follow = True
+                log.scroll = 0
+
+            # Selective cleanup (D) — stow page only
+            elif c == ord('D') and current_pane == 0 and not is_running:
+                if not selected_stow:
+                    ui_events.put(("toast", False, f"{ICONS['warn']} No stow packages selected", ["Select packages first"]))
+                else:
+                    selected_list = sorted(selected_stow)
+                    if not STOW_DIR.exists():
+                        ui_events.put(("toast", True, f"{ICONS['error']} Missing stow directory", [str(STOW_DIR)]))
+                    else:
+                        files, dirs = enumerate_stow_targets_for_pkgs(selected_list)
+                        targets_preview = files + dirs
+                        if not targets_preview:
+                            ui_events.put(("toast", False, f"{ICONS['warn']} Nothing to remove", ["No targets from selected packages"]))
+                        else:
+                            if confirm_remove_dialog(stdscr, targets_preview):
+                                def do_cleanup():
+                                    return selective_cleanup_worker(files, dirs, logger)
+
+                                def after_cleanup(summary):
+                                    dry = summary.get('dry_run')
+                                    fr = summary.get('files_removed', 0)
+                                    dr = summary.get('dirs_removed', 0)
+                                    sk = summary.get('skipped', 0)
+                                    er = summary.get('errors', 0)
+                                    t = f"{ICONS['success']} Cleanup complete" if er == 0 else f"{ICONS['warn']} Cleanup had issues"
+                                    sfx = " [DRY]" if dry else ""
+                                    ui_events.put(("toast", er > 0, t, [f"files {fr}, dirs {dr}, skipped {sk}, errors {er}{sfx}"]))
+
+                                run_async("Cleaning…", do_cleanup, on_success=after_cleanup)
+                            else:
+                                logger("info", "Cleanup cancelled")
 
         # Decide if redraw needed
         need_draw = False
         spinner_frame_changed = False
         if is_running:
-            frame = int(time.time() * 5) % len(spinner_symbols)
+            frame = int(time.time() * 4) % 4
             if frame != last_spinner_frame:
                 spinner_frame_changed = True
                 last_spinner_frame = frame
-        # Determine causes
         user_input = c != -1
         log_update = log.dirty
         if user_input or log_update or spinner_frame_changed:
@@ -1384,7 +1394,7 @@ def main(stdscr):
             only_log = (not user_input) and log_update and not show_help and not spinner_frame_changed
             only_spinner = spinner_frame_changed and not user_input and not log_update and not show_help
             if only_log and now - last_log_redraw_time < LOG_REDRAW_INTERVAL:
-                pass  # throttle log-only updates
+                pass
             else:
                 if only_log:
                     draw(partial=True)
