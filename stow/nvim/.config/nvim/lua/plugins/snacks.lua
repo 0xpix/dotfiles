@@ -21,39 +21,39 @@ return {
   opts = {
     bigfile = { enabled = true },
     dashboard = {
+      formats = {
+        key = function(item)
+          return { { "[", hl = "special" }, { item.key, hl = "key" }, { "]", hl = "special" } }
+        end,
+      },
       preset = {
         pick = nil,
         ---@type snacks.dashboard.Item[]
         keys = {
-          { icon = " ", key = "f", desc = "Find File", action = ":lua Snacks.dashboard.pick('files')" },
-          { icon = " ", key = "n", desc = "New File", action = ":ene | startinsert" },
-          { icon = " ", key = "g", desc = "Find Text", action = ":lua Snacks.dashboard.pick('live_grep')" },
-          { icon = " ", key = "r", desc = "Recent Files", action = ":lua Snacks.dashboard.pick('oldfiles')" },
-          { icon = " ", key = "c", desc = "Config", action = ":lua Snacks.dashboard.pick('files', {cwd = vim.fn.stdpath('config')})" },
-          { icon = " ", key = "s", desc = "Restore Session", section = "session" },
+          { icon = " ", key = "f", desc = "Find File", action = ":lua Snacks.dashboard.pick('files')" },
+          { icon = " ", key = "n", desc = "New File", action = ":ene | startinsert" },
+          { icon = " ", key = "g", desc = "Find Text", action = ":lua Snacks.dashboard.pick('live_grep')" },
+          { icon = " ", key = "c", desc = "Config", action = ":lua Snacks.dashboard.pick('files', {cwd = vim.fn.stdpath('config')})" },
+          { icon = " ", key = "s", desc = "Restore Session", section = "session" },
           { icon = "󰒲 ", key = "l", desc = "Lazy", action = ":Lazy", enabled = package.loaded.lazy ~= nil },
-          { icon = " ", key = "q", desc = "Quit", action = ":qa" },
+          { icon = " ", key = "q", desc = "Quit", action = ":qa" },
         },
         header = [[
-                                                      
-               ████ ██████           █████      ██
-              ███████████             █████ 
-              █████████ ███████████████████ ███   ███████████
-             █████████  ███    █████████████ █████ ██████████████
-            █████████ ██████████ █████████ █████ █████ ████ █████
-          ███████████ ███    ███ █████████ █████ █████ ████ █████
-         ██████  █████████████████████ ████ █████ █████ ████ ██████
-      ]],
+███╗   ██╗███████╗ ██████╗ ██╗   ██╗██╗███╗   ███╗
+████╗  ██║██╔════╝██╔═══██╗██║   ██║██║████╗ ████║
+██╔██╗ ██║█████╗  ██║   ██║██║   ██║██║██╔████╔██║
+██║╚██╗██║██╔══╝  ██║   ██║╚██╗ ██╔╝██║██║╚██╔╝██║
+██║ ╚████║███████╗╚██████╔╝ ╚████╔╝ ██║██║ ╚═╝ ██║
+╚═╝  ╚═══╝╚══════╝ ╚═════╝   ╚═══╝  ╚═╝╚═╝     ╚═╝]],
       },
       sections = {
-        { section = 'header' },
-        {
-          section = "keys",
-          indent = 1,
-          padding = 1,
-        },
-        { section = 'recent_files', icon = ' ', title = 'Recent Files', indent = 3, padding = 2 },
+        { section = "header" },
+        { title = "Bookmarks", padding = 1 },
+        { section = "keys" },
         { section = "startup" },
+        { title = "Sessions", padding = 1 },
+        { section = "projects", padding = 1 },
+
       },
     },
     explorer = { enabled = false },
@@ -69,18 +69,17 @@ return {
     zen = {
       enabled = true,
       toggles = {
-        ufo             = true,
         dim             = true,
         git_signs       = false,
         diagnostics     = false,
         line_number     = false,
         relative_number = false,
         signcolumn      = "no",
-        indent          = false
-      }
+        indent          = false,
+      },
     },
   },
   config = function(_, opts)
     require("snacks").setup(opts)
-  end
+  end,
 }
