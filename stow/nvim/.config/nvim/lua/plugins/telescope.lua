@@ -1,26 +1,92 @@
 return {
   "nvim-telescope/telescope.nvim",
+  event = "VeryLazy",
   dependencies = {
     "nvim-lua/plenary.nvim",
     { "nvim-telescope/telescope-fzf-native.nvim", build = "make" },
     "nvim-telescope/telescope-ui-select.nvim",
   },
   config = function()
-    local telescope = require("telescope")
-    local actions = require("telescope.actions")
     local builtin = require("telescope.builtin")
+    vim.keymap.set("n", "<leader>ff", builtin.find_files, { desc = "Find Files" })
+    vim.keymap.set("n", "<leader>fg", builtin.live_grep, { desc = "Live Grep" })
+    vim.keymap.set(
+      "n",
+      "<leader>fc",
+      '<cmd>lua require("telescope.builtin").live_grep({ glob_pattern = "!{spec,test}"})<CR>',
+      { desc = "Live Grep Code" }
+    )
+    vim.keymap.set("n", "<leader>fb", builtin.buffers, { desc = "Find Buffers" })
+    vim.keymap.set("n", "<leader>fh", builtin.help_tags, { desc = "Find Help Tags" })
+    vim.keymap.set("n", "<leader>fs", builtin.lsp_document_symbols, { desc = "Find Symbols" })
+    vim.keymap.set("n", "<leader>fi", builtin.git_status, { desc = "Git Status" })
+    vim.keymap.set("n", "<leader>fo", builtin.oldfiles, { desc = "Find Old Files" })
+    vim.keymap.set("n", "<leader>fw", builtin.grep_string, { desc = "Find Word under Cursor" })
+    vim.keymap.set("n", "<leader>gc", builtin.git_commits, { desc = "Search Git Commits" })
+    vim.keymap.set("n", "<leader>gb", builtin.git_bcommits, { desc = "Search Git Commits for Buffer" })
+    vim.keymap.set("n", "<leader>fk", builtin.keymaps, { desc = "Find Keymaps" })
+    vim.keymap.set("n", "<leader>/", function()
+      -- You can pass additional configuration to telescope to change theme, layout, etc.
+      require("telescope.builtin").current_buffer_fuzzy_find(require("telescope.themes").get_dropdown({
+        winblend = 10,
+        previewer = false,
+        layout_config = { width = 0.7 },
+      }))
+    end, { desc = "[/] Fuzzily search in current buffer" })
+
+    local telescope = require("telescope")
+    local telescopeConfig = require("telescope.config")
+
+    -- Clone the default Telescope configuration
+    local vimgrep_arguments = { unpack(telescopeConfig.values.vimgrep_arguments) }
+
+    -- I want to search in hidden/dot files.
+    table.insert(vimgrep_arguments, "--hidden")
+    -- I don't want to search in the `.git` directory.
+    table.insert(vimgrep_arguments, "--glob")
+    table.insert(vimgrep_arguments, "!**/.git/*")
+
+    local actions = require("telescope.actions")
+
+    local select_one_or_multi = function(prompt_bufnr)
+      local picker = require("telescope.actions.state").get_current_picker(prompt_bufnr)
+      local multi = picker:get_multi_selection()
+      if not vim.tbl_isempty(multi) then
+        require("telescope.actions").close(prompt_bufnr)
+        for _, j in pairs(multi) do
+          if j.path ~= nil then
+            vim.cmd(string.format("%s %s", "edit", j.path))
+          end
+        end
+      else
+        require("telescope.actions").select_default(prompt_bufnr)
+      end
+    end
 
     telescope.setup({
       defaults = {
-        sorting_strategy = "ascending",
-        layout_config = {
-          horizontal = { prompt_position = "top" },
-        },
+        -- `hidden = true` is not supported in text grep commands.
+        vimgrep_arguments = vimgrep_arguments,
+        path_display = { "truncate" },
         mappings = {
-          i = {
-            ["<C-j>"] = actions.move_selection_next,
-            ["<C-k>"] = actions.move_selection_previous,
+          n = {
+            ["<C-w>"] = actions.send_selected_to_qflist + actions.open_qflist,
           },
+          i = {
+            ["<C-j>"] = actions.cycle_history_next,
+            ["<C-k>"] = actions.cycle_history_prev,
+            ["<CR>"] = select_one_or_multi,
+            ["<C-w>"] = actions.send_selected_to_qflist + actions.open_qflist,
+            ["<C-D>"] = actions.delete_buffer,
+			["<C-s>"] = actions.cycle_previewers_next,
+			["<C-a>"] = actions.cycle_previewers_prev,
+          },
+        },
+      },
+      pickers = {
+        find_files = {
+          -- `hidden = true` will still show the inside of `.git/` as it's not `.gitignore`d.
+          find_command = { "rg", "--files", "--hidden", "--glob", "!**/.git/*" },
         },
       },
       extensions = {
@@ -31,16 +97,8 @@ return {
       },
     })
 
-    telescope.load_extension("fzf")
-    telescope.load_extension("ui-select")
-
-    vim.keymap.set("n", "<C-p>", builtin.find_files, { desc = "Find Files" })
-    vim.keymap.set("n", "<leader><leader>", builtin.oldfiles, { desc = "Recent Files" })
-    vim.keymap.set("n", "<leader>fb", builtin.buffers, { desc = "Buffers" })
-    vim.keymap.set("n", "<leader>fg", builtin.live_grep, { desc = "Grep Files" })
-    vim.keymap.set("n", "<leader>fh", builtin.help_tags, { desc = "Help Tags" })
-    vim.keymap.set("n", "<leader>fd", builtin.diagnostics, { desc = "Diagnostics" })
-    vim.keymap.set("n", "<leader>fw", builtin.grep_string, { desc = "Grep Word" })
-    vim.keymap.set("n", "<leader>gs", builtin.git_status, { desc = "Git Status" })
+    require("telescope").load_extension("fzf")
+    require("telescope").load_extension("ui-select")
+    require("telescope").load_extension("noice")
   end,
 }
