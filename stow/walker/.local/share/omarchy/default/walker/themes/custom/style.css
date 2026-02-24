@@ -25,7 +25,8 @@ scrollbar {
 /* ── wrapper ─────────────────────────────────────── */
 .box-wrapper {
   background: alpha(@base, 0.95);
-  padding: 20px;
+  padding: 30px;
+  min-width: 800px;
   border: 1px solid alpha(@border, 0.4);
   border-radius: 14px;
 }
@@ -34,15 +35,15 @@ scrollbar {
 .cat-overlay {
   padding: 10px 6px 10px 16px;
   margin-left: 10px;
-  border-left: 1px solid alpha(@border, 0.15);
+  border-left: 1px solid alpha(@border, 0.25);
 }
 
 .cat-frame {
-  font-size: 5px;
-  line-height: 1.1;
-  color: alpha(@border, 0.75);
+  font-size: 7px;
+  line-height: 1.5;
+  color: alpha(@border, 0.95);
   opacity: 0;
-  animation: show-f1 5s linear infinite;
+  animation: show-f1 4s linear infinite;
 }
 
 /* ── tail animation (5-frame cycle, 5s = 1s per frame) ── */
@@ -90,19 +91,19 @@ scrollbar {
 }
 
 .cat-frame-2 {
-  animation: show-f2 5s linear infinite;
+  animation: show-f2 4s linear infinite;
 }
 
 .cat-frame-3 {
-  animation: show-f3 5s linear infinite;
+  animation: show-f3 4s linear infinite;
 }
 
 .cat-frame-4 {
-  animation: show-f4 5s linear infinite;
+  animation: show-f4 4s linear infinite;
 }
 
 .cat-frame-5 {
-  animation: show-f5 5s linear infinite;
+  animation: show-f5 4s linear infinite;
 }
 
 /* ── search ──────────────────────────────────────── */
