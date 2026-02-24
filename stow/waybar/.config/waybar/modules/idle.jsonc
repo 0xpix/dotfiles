@@ -7,7 +7,7 @@
     },
     "return-type": "json",
     "exec": "~/.config/waybar/scripts/idle-status.sh",
-    "interval": 1,                          // small poll to catch late flips
+    "interval": 30,                          // poll to catch late flips
     "exec-on-event": true,                  // re-run immediately on click
     "on-click": "omarchy-toggle-idle",
     "signal": 10,
