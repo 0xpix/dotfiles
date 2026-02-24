@@ -534,7 +534,7 @@ def check_stow():
     """Check if stow is installed"""
     return subprocess.call("command -v stow >/dev/null 2>&1", shell=True) == 0
 
-def run(cmd, logger, cwd=None):
+def run_cmd(cmd, logger, cwd=None):
     """Run command and stream output to logger"""
     logger("cmd", f"{cmd}")
     p = subprocess.Popen(
@@ -1096,7 +1096,7 @@ def main(stdscr):
 
         logger("info", f"Stowing {len(selected_list)} packages...")
 
-        exit_code = run(cmd, logger, cwd=str(STOW_DIR))
+        exit_code = run_cmd(cmd, logger, cwd=str(STOW_DIR))
 
         if exit_code != 0:
             raise Exception(f"Stow failed with exit code {exit_code}")
