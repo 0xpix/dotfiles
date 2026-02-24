@@ -1,0 +1,196 @@
+@import "../../../../../../../.config/omarchy/current/theme/walker.css";
+
+* {
+  all: unset;
+}
+
+* {
+  font-family: monospace;
+  font-size: 16px;
+  color: @text;
+}
+
+scrollbar {
+  opacity: 0;
+}
+
+.normal-icons {
+  -gtk-icon-size: 16px;
+}
+
+.large-icons {
+  -gtk-icon-size: 32px;
+}
+
+/* ── wrapper ─────────────────────────────────────── */
+.box-wrapper {
+  background: alpha(@base, 0.95);
+  padding: 20px;
+  border: 1px solid alpha(@border, 0.4);
+  border-radius: 14px;
+}
+
+/* ── braille cat accent ───────────────────────────── */
+.cat-overlay {
+  padding: 10px 6px 10px 16px;
+  margin-left: 10px;
+  border-left: 1px solid alpha(@border, 0.15);
+}
+
+.cat-frame {
+  font-size: 5px;
+  line-height: 1.1;
+  color: alpha(@border, 0.75);
+  opacity: 0;
+  animation: show-f1 5s linear infinite;
+}
+
+/* ── tail animation (5-frame cycle, 5s = 1s per frame) ── */
+/* Each frame visible for 1s (20% of 5s), near-instant transitions. */
+
+@keyframes show-f1 {
+  0%    { opacity: 1; }
+  19%   { opacity: 1; }
+  20%   { opacity: 0; }
+  100%  { opacity: 0; }
+}
+
+@keyframes show-f2 {
+  0%    { opacity: 0; }
+  19%   { opacity: 0; }
+  20%   { opacity: 1; }
+  39%   { opacity: 1; }
+  40%   { opacity: 0; }
+  100%  { opacity: 0; }
+}
+
+@keyframes show-f3 {
+  0%    { opacity: 0; }
+  39%   { opacity: 0; }
+  40%   { opacity: 1; }
+  59%   { opacity: 1; }
+  60%   { opacity: 0; }
+  100%  { opacity: 0; }
+}
+
+@keyframes show-f4 {
+  0%    { opacity: 0; }
+  59%   { opacity: 0; }
+  60%   { opacity: 1; }
+  79%   { opacity: 1; }
+  80%   { opacity: 0; }
+  100%  { opacity: 0; }
+}
+
+@keyframes show-f5 {
+  0%    { opacity: 0; }
+  79%   { opacity: 0; }
+  80%   { opacity: 1; }
+  100%  { opacity: 1; }
+}
+
+.cat-frame-2 {
+  animation: show-f2 5s linear infinite;
+}
+
+.cat-frame-3 {
+  animation: show-f3 5s linear infinite;
+}
+
+.cat-frame-4 {
+  animation: show-f4 5s linear infinite;
+}
+
+.cat-frame-5 {
+  animation: show-f5 5s linear infinite;
+}
+
+/* ── search ──────────────────────────────────────── */
+.search-container {
+  background: @base;
+  padding: 10px;
+  border-radius: 8px;
+}
+
+.input placeholder {
+  opacity: 0.4;
+  font-style: italic;
+}
+
+.input {
+  caret-color: @border;
+}
+
+.input:focus,
+.input:active {
+  box-shadow: none;
+  outline: none;
+}
+
+/* ── results ─────────────────────────────────────── */
+.placeholder {
+  color: alpha(@text, 0.35);
+  font-style: italic;
+}
+
+child:selected .item-box {
+  background: alpha(@border, 0.12);
+  border-radius: 8px;
+}
+
+child:selected .item-box * {
+  color: @selected-text;
+}
+
+child:hover .item-box {
+  background: alpha(@border, 0.06);
+  border-radius: 8px;
+}
+
+.item-box {
+  padding-left: 14px;
+}
+
+.item-text-box {
+  all: unset;
+  padding: 10px 0;
+}
+
+.item-subtext {
+  font-size: 0px;
+  min-height: 0px;
+  margin: 0px;
+  padding: 0px;
+}
+
+.item-image {
+  margin-right: 14px;
+  -gtk-icon-transform: scale(0.9);
+}
+
+.current {
+  font-style: italic;
+}
+
+/* ── keybinds ────────────────────────────────────── */
+.keybinds {
+  font-size: 0;
+  min-height: 0;
+  padding: 0;
+  margin: 0;
+}
+
+.keybind-hints {
+  background: @background;
+  padding: 10px;
+  margin-top: 10px;
+}
+
+.preview {
+}
+
+.error {
+  color: @border;
+  font-size: 12px;
+  padding: 6px 0;
+}
