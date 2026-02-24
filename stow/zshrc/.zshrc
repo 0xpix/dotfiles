@@ -94,7 +94,7 @@ alias uvd='deactivate'
 alias uva='source .venv/bin/activate'
 
 # Load env variables
-. "$HOME/.local/share/../bin/env"
+. "$HOME/.local/bin/env"
 
 # Go PATH
 export PATH=$PATH:/usr/local/go/bin
